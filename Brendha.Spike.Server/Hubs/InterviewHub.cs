@@ -1,11 +1,13 @@
 ﻿using Brendha.Spike.Core.Models;
 using Brendha.Spike.Server.Infrastructure;
+using Brendha.Spike.Server.Services;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Brendha.Spike.Server.Hubs
 {
     public class InterviewHub(AudioStreamBuffer buffer,
-        ILogger<InterviewHub> logger) : Hub
+        ILogger<InterviewHub> logger,
+        GeminiLiveService geminiService) : Hub
     {
         public async Task SendAudioChunk(string base64data)
         {
@@ -37,6 +39,16 @@ namespace Brendha.Spike.Server.Hubs
             }
 
 
+        }
+        public async Task SendUserText(string text) 
+        {
+            await geminiService.AppendUserHistory(text);
+        }
+
+        public async Task RequestSessionTimer()
+        {
+            var seconds = geminiService.GetTimeRemaining();
+            await Clients.Caller.SendAsync("SessionStarted", seconds);
         }
     }
 }

@@ -1,0 +1,30 @@
+[11:26:54] Brendha (IA): : **Initiating the Interview Process**
+
+I've got the ball rolling! My focus now is on initiating the interview as Brendha, a Senior Technical Recruiter. I'll introduce myself and the role succinctly, then smoothly transition into asking my first technical question, which I will formulate as a simple, conversational query about the distinctions between front-end and back-end development. I'm keen on establishing a professional and cordial rapport right from the start.
+
+
+
+[11:27:02] Brendha (IA): : **Clarifying Visuals**
+
+I've registered the user's inquiry about a video and need to clarify my limitations. I'll confirm that I can indeed hear them, and I'll redirect us back to the current context of our Junior Developer interview to keep things running smoothly.
+
+
+
+[11:27:24] Brendha (IA): : **Acknowledge and Transition**
+
+I've noted the user's positive state and polite return of the question. I plan to respond with friendly professionalism, briefly address their query, and seamlessly pivot to the interview's objective, presenting the role as per my instructions.
+
+
+
+[11:29:18] Brendha (IA): : **Confirming Audio Clarity**
+
+I've registered a possible connectivity hiccup. The user's "Alô" suggests they might be experiencing some audio uncertainty after I initiated the technical part of the interview. I need to reassure them with a clear confirmation that I can hear them, and that my audio seems fine, so we can get back on track.
+
+
+
+[11:29:29] Brendha (IA): : **Initiating Technical Inquiry**
+
+I'm now shifting gears to the technical interview questions. Following the plan, I'll launch with a question on stateless architecture, seeing as it's a foundational concept that sets the stage for more in-depth exploration.
+
+
+

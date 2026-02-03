@@ -3,6 +3,7 @@ using Brendha.Spike.Server.Infrastructure;
 using Brendha.Spike.Server.Services;
 using Brendha.Spike.Server.Workers;
 using DotNetEnv;
+using Microsoft.AspNetCore.SignalR;
 
 Env.Load();
 var builder = WebApplication.CreateBuilder(args);
@@ -20,8 +21,9 @@ builder.Services.AddSingleton<GeminiLiveService>(sp =>
     }
 
     var logger = sp.GetRequiredService<ILogger<GeminiLiveService>>();
+    var hubContext = sp.GetRequiredService<IHubContext<InterviewHub>>();
 
-    return new GeminiLiveService(apiKey, logger);
+    return new GeminiLiveService(apiKey, logger, hubContext);
 });
 
 builder.Services.AddControllers();
@@ -47,7 +49,6 @@ builder.Services.AddSignalR(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
