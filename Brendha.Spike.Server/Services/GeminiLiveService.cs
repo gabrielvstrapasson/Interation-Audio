@@ -33,7 +33,6 @@ namespace Brendha.Spike.Server.Services
                 await _ws.ConnectAsync(uri, CancellationToken.None);
                 logger.LogInformation("Connect in API Gemini is successfull");
 
-
                 await SendSystemInstruction();
 
                 await ReceiveLoopAsync();
@@ -46,7 +45,11 @@ namespace Brendha.Spike.Server.Services
 
         }
 
-        public void Dispose() => _ws.Dispose();
+        public void Dispose()
+        {
+            _ws.CloseAsync(WebSocketCloseStatus.EndpointUnavailable, "The socket is being closed", CancellationToken.None);
+            GC.SuppressFinalize(this);
+        }
 
         private async Task SendSystemInstruction()
         {
