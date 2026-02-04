@@ -1,140 +1,189 @@
-﻿using System.Diagnostics;
+﻿using Brendha.Spike.Core.Models.Gemini;
+using Brendha.Spike.Server.Hubs;
+using Brendha.Spike.Server.Infrastructure.Interfaces;
+using Microsoft.AspNetCore.Mvc.Formatters;
+using Microsoft.AspNetCore.SignalR;
+using System.Diagnostics;
 using System.Net.WebSockets;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Xml;
 
 namespace Brendha.Spike.Server.Services
 {
-    public class GeminiLiveService(string apiKey,
-                                    ILogger<GeminiLiveService> logger) : IDisposable
+    public class GeminiLiveService : IDisposable
     {
         private const string GeminiUrl = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent";
+        private const string TOOL_NAME = "registrar_fala_usuario";
+        private readonly string _apiKey;
+        private readonly ILogger<GeminiLiveService> _logger;
+        public readonly IHubContext<InterviewHub> _hubContext;
+        private readonly IInterviewLogger _interviewLogger;
+
         private ClientWebSocket _ws;
+        private DateTime _sessionEndTime;
+
         private readonly Stopwatch _latencyWatch = new();
         private bool _isWaitingForFirstResponse = false;
         private bool _aiIsSpeaking = false;
 
         public event Func<byte[], Task>? OnAudioReceived;
+
+        public GeminiLiveService(string apiKey,
+            ILogger<GeminiLiveService> logger,
+            IHubContext<InterviewHub> hubContext,
+            IInterviewLogger interviewLogger)
+        {
+            _apiKey = apiKey;
+            _logger = logger;
+            _hubContext = hubContext;
+            _interviewLogger = interviewLogger;
+        }
         public async Task ConnectAsync()
         {
-            if (string.IsNullOrEmpty(apiKey)) throw new Exception("API Key não encontrada");
-            if (_ws != null)
-            {
-                try { _ws.Dispose(); } catch { }
-            }
+            if (string.IsNullOrEmpty(_apiKey)) throw new Exception("API Key is missing");
 
+            Dispose();
             _ws = new ClientWebSocket();
-            var uri = new Uri($"{GeminiUrl}?key={apiKey}");
 
             try
             {
-                logger.LogInformation("Trying connect in Google WebSocket");
-                await _ws.ConnectAsync(uri, CancellationToken.None);
-                logger.LogInformation("Connect in API Gemini is successfull");
+                _logger.LogInformation("Trying connect in Gemini..");
+                await _ws.ConnectAsync(new Uri($"{GeminiUrl}?key={_apiKey}"), CancellationToken.None);
 
-                await SendSystemInstruction();
-
+                await InitializeSessionAsync();
                 await ReceiveLoopAsync();
             }
             catch (Exception ex)
             {
-                logger.LogError($"Fail for connect in API: {ex.Message}");
+                _logger.LogError($"Fail for connect in API: {ex.Message}");
                 throw;
             }
 
         }
-
-        public void Dispose()
+        private async Task InitializeSessionAsync()
         {
-            _ws.CloseAsync(WebSocketCloseStatus.EndpointUnavailable, "The socket is being closed", CancellationToken.None);
-            GC.SuppressFinalize(this);
-        }
+            _sessionEndTime = DateTime.UtcNow.AddMinutes(10);
+            await _hubContext.Clients.All.SendAsync("SessionStarted", GetTimeRemaining());
 
-        private async Task SendSystemInstruction()
-        {
-            var setupMessage = new
+            var config = CreateSetupConfig();
+            var options = new JsonSerializerOptions
             {
-                setup = new
-                {
-                    model = "models/gemini-2.5-flash-native-audio-latest",
-                    generation_config = new
-                    {
-                        response_modalities = new[] { "AUDIO" },
-                        speech_config = new
-                        {
-                            voice_config = new
-                            {
-                                prebuilt_voice_config = new
-                                {
-                                    voice_name = "Aoede"
-                                }
-                            }
-                        }
-                    },
-                    system_instruction = new
-                    {
-                        parts = new[]
-                        {
-                            new
-                            {
-                                text = @"
-                                    Você é Brendha, uma Recrutadora Técnica Sênior especializada em .NET e C#.
-                                    Sua missão é entrevistar o candidato para uma vaga tech.
-                                    
-                                    Comportamento:
-                                    0. Se apresente, fale sobre a vaga e depois inicie a entrevista.
-                                    1. Seja profissional, mas cordial.
-                                    2. Faça UMA pergunta técnica por vez. Não faça listas.
-                                    3. Comece se apresentando e pedindo para o candidato se apresentar.
-                                    4. Avalie as respostas. Se ele errar, corrija educadamente. Se acertar, aprofunde.
-                                    5. Tópicos para cobrir: Async/Await, Injeção de Dependência, Garbage Collector e Arquitetura Limpa.
-                                    6. Mantenha as respostas curtas e faladas (estilo conversacional)."
-                            }
-                        }
-                    }
-                }
+                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
             };
 
-            string json = JsonSerializer.Serialize(setupMessage);
-
-            await SendJsonAsync(json);
-            logger.LogInformation("Instructions send from Brendha.");
-
+            await SendJsonAsync(JsonSerializer.Serialize(config, options));
+            _logger.LogInformation("Start Session");
         }
+        private GeminiSetupRequest CreateSetupConfig()
+        {
+            var prompt = new StringBuilder();
+            prompt.AppendLine("Você é Brendha, Recrutadora Técnica Senior.");
+            prompt.AppendLine("REGRA DE OURO: Sua saída de texto deve ser A TRANSCRIÇÃO EXATA do que você está falando no áudio.");
+            prompt.AppendLine("REGRA 0: NÃO GERE PENSAMENTOS INTERNOS. NÃO USE TEXTO EM NEGRITO.");
+            prompt.AppendLine("REGRA 1: Sempre que entender o usuário, chame a ferramenta 'registrar_fala_usuario'.");
+            prompt.AppendLine("REGRA 2: Só responda em áudio APÓS chamar a ferramenta.");
 
+            var history = _interviewLogger.GetHistory();
+            if (!string.IsNullOrEmpty(history))
+            {
+                prompt.AppendLine($"\n[RECONEXÃO - HISTÓRICO]:\n{history}\nContinue a entrevista.");
+            }
+
+            return new GeminiSetupRequest(new GeminiSetup(
+                Model: "models/gemini-2.5-flash-native-audio-latest",
+                GenerationConfig: new GenerationConfig(
+                    ResponseModalities: new[] { "AUDIO" },
+                    SpeechConfig: new SpeechConfig(new VoiceConfig(new PrebuiltVoiceConfig("Aoede")))
+                    ),
+                    SystemInstruction: new SystemInstruction(new[] { new Part(prompt.ToString()) }),
+                    Tools: new List<Tool>
+                    {
+                        new Tool(new List<FunctionDeclaration>
+                        {
+                            new FunctionDeclaration(
+                                Name: TOOL_NAME,
+                                Description: "Record the candidate's speech.",
+                                Parameters: new FunctionParameters(
+                                    Type: "OBJECT",
+                                    Properties: new Dictionary<string, PropertyDetail>
+                                    {
+                                        { "texto_entendido", new PropertyDetail("STRING", "Texto exato da fala.") }
+                                    },
+                                    Required: new[] { "texto_entendido" }
+                                )
+                            )
+                        })
+                    }
+                ));
+        }
+        public async Task AppendUserHistory(string text) => await _interviewLogger.LogAsync("System:", text);
         public async Task SendAudioChunkAsync(byte[] audioData)
         {
-            if (_ws == null || _ws.State != WebSocketState.Open) return;
+            if (_ws?.State != WebSocketState.Open) return;
 
-            var message = new
+            var payload = new RealtimeInputRequest(new RealtimeInput(new[]
             {
-                realtime_input = new
+                new MediaChunk("audio/pcm", Convert.ToBase64String(audioData))
+            }));
+
+            if (!_aiIsSpeaking) { _latencyWatch.Restart(); _isWaitingForFirstResponse = true; }
+            await SendJsonAsync(JsonSerializer.Serialize(payload));
+        }
+        public double GetTimeRemaining()
+        {
+            var remaining = (_sessionEndTime - DateTime.UtcNow).TotalSeconds;
+            return remaining > 0 ? remaining : 0;
+        }
+        private async Task ProcessIncomingMessageAsync(string json)
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("toolCall", out var toolCall)) await HandleToolCallAsync(toolCall);
+
+            if (root.TryGetProperty("serverContent", out var serverContent))
+            {
+                if (serverContent.TryGetProperty("modelTurn", out var modelTurn) &&
+                    modelTurn.TryGetProperty("parts", out var parts))
                 {
-                    media_chunks = new[]
+                    foreach (var part in parts.EnumerateArray())
                     {
-                        new
+                        if (part.TryGetProperty("text", out var textJson))
                         {
-                            mime_type = "audio/pcm",
-                            data = Convert.ToBase64String(audioData)
+                            var text = textJson.GetString();
+
+                            if (!string.IsNullOrWhiteSpace(text))
+                                await _interviewLogger.LogAsync("Brendha (IA)", text);
+                        }
+
+                        if (part.TryGetProperty("inlineData", out var audioData))
+                        {
+                            if (_isWaitingForFirstResponse)
+                            {
+                                _latencyWatch.Stop();
+
+                                _aiIsSpeaking = true;
+                                _logger.LogInformation($"Ping: {_latencyWatch.ElapsedMilliseconds}ms");
+                                _isWaitingForFirstResponse = false;
+                            }
+
+                            var base64 = audioData.GetProperty("data").GetString();
+                            if (OnAudioReceived != null) await OnAudioReceived.Invoke(Convert.FromBase64String(base64!));
                         }
                     }
                 }
-            };
-
-            var json = JsonSerializer.Serialize(message);
-            if (!_aiIsSpeaking)
-            {
-                _latencyWatch.Restart();
-                _isWaitingForFirstResponse = true;
+                if (serverContent.TryGetProperty("turnComplete", out _)) _aiIsSpeaking = false;
             }
-            await SendJsonAsync(JsonSerializer.Serialize(message));
         }
-
         private async Task ReceiveLoopAsync()
         {
             var buffer = new byte[1024 * 64];
-            while (_ws == null || _ws.State == WebSocketState.Open)
+            while (_ws?.State == WebSocketState.Open)
             {
                 try
                 {
@@ -142,88 +191,62 @@ namespace Brendha.Spike.Server.Services
 
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
-                        logger.LogWarning($"Google closed connection: {result.CloseStatus}");
+                        _logger.LogWarning($"Google closed connection. Status: {result.CloseStatus}, Desc: {result.CloseStatusDescription}");
                         await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
                         break;
                     }
-
-                    if (result.MessageType == WebSocketMessageType.Text ||
-                        result.MessageType == WebSocketMessageType.Binary)
-                    {
-                        string responseJson = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                        try
-                        {
-                            using var doc = JsonDocument.Parse(responseJson);
-                            var root = doc.RootElement;
-
-                            if (root.TryGetProperty("serverContent", out var serverContent) &&
-                                serverContent.TryGetProperty("modelTurn", out var modelTurn) &&
-                                modelTurn.TryGetProperty("parts", out var parts))
-                            {
-                                foreach (var part in parts.EnumerateArray())
-                                {
-                                    if (part.TryGetProperty("text", out var textElement))
-                                    {
-                                        string texto = textElement.GetString();
-                                        if (!string.IsNullOrWhiteSpace(texto))
-                                            logger.LogWarning($"Brendha: {texto}");
-                                    }
-
-                                    if (part.TryGetProperty("inlineData", out var audioData))
-                                    {
-                                        if (_isWaitingForFirstResponse)
-                                        {
-                                            _latencyWatch.Stop();
-                                            _aiIsSpeaking = true;
-                                            Console.ForegroundColor = ConsoleColor.Yellow;
-                                            logger.LogWarning($"Ping: {_latencyWatch.ElapsedMilliseconds}");
-                                            Console.ResetColor();
-                                            _isWaitingForFirstResponse = false;
-                                        }
-
-                                        string base64audio = audioData.GetProperty("data").GetString();
-                                        byte[] audioBytes = Convert.FromBase64String(base64audio);
-
-                                        if (OnAudioReceived != null)
-                                        {
-                                            await OnAudioReceived.Invoke(audioBytes);
-                                        }
-                                    }
-                                }
-                            }
-                            if (root.TryGetProperty("serverContent", out var sc) &&
-                                sc.TryGetProperty("turnComplete", out var tc))
-                            {
-                                _aiIsSpeaking = false;
-                                logger.LogInformation("Brendha: Finished talking.");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.LogError($"Error for read JSON {ex.Message}");
-                        }
-                    }
-                    else if (result.MessageType == WebSocketMessageType.Close)
-                    {
-                        logger.LogError($"Google closed connection");
-                        logger.LogError($"Status: {result.CloseStatus}");
-                        logger.LogError($"Motivo: {result.CloseStatusDescription}");
-                        await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
-                    }
+                    var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                    await ProcessIncomingMessageAsync(json);
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError($"Error in receive loop: {ex.Message}");
+                    _logger.LogError($"Error in receive loop: {ex.Message}");
                     break;
                 }
             }
 
         }
+        private async Task HandleToolCallAsync(JsonElement toolCall)
+        {
+            if (!toolCall.TryGetProperty("functionCalls", out var functionCalls)) return;
 
+            var responses = new List<FunctionResponse>();
+
+            foreach (var call in functionCalls.EnumerateArray())
+            {
+                var name = call.GetProperty("name").GetString();
+                var id = call.GetProperty("id").GetString();
+
+                if (name == TOOL_NAME)
+                {
+                    var args = call.GetProperty("args");
+                    if (args.TryGetProperty("texto_entendido", out var txtElement))
+                    {
+                        var text = txtElement.GetString();
+                        await _interviewLogger.LogAsync("Candidato:", text ?? "");
+                        _logger.LogInformation($"Entendido: {text}");
+                    }
+                }
+
+                responses.Add(new FunctionResponse(new { result = "ok" }, id!));
+            }
+            var payload = new ToolCallResponse(new ToolResponsePayload(responses));
+            var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+            await SendJsonAsync(JsonSerializer.Serialize(payload, options));
+        }
         private async Task SendJsonAsync(string json)
         {
+            if (_ws?.State != WebSocketState.Open) return;
             var bytes = Encoding.UTF8.GetBytes(json);
             await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
         }
+        private void DisposeWebScoket()
+        {
+            if (_ws != null) {
+                try { _ws.Dispose(); } catch { }
+                _ws = null;
+            }
+        }
+        public void Dispose() => DisposeWebScoket();
     }
 }

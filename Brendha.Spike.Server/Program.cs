@@ -1,27 +1,30 @@
 using Brendha.Spike.Server.Hubs;
 using Brendha.Spike.Server.Infrastructure;
+using Brendha.Spike.Server.Infrastructure.Interfaces;
 using Brendha.Spike.Server.Services;
 using Brendha.Spike.Server.Workers;
 using DotNetEnv;
+using Microsoft.AspNetCore.SignalR;
 
 Env.Load();
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton<AudioStreamBuffer>();
+builder.Services.AddSingleton<IInterviewLogger, InterviewFileLogger>();
+
 builder.Services.AddSingleton<GeminiLiveService>(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
-    var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY")
-    ?? config["Gemini:ApiKey"];
+    var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? config["Gemini:ApiKey"];
 
-    if (string.IsNullOrEmpty(apiKey))
-    {
-        throw new Exception("Gemini API Key is not configured.");
-    }
+    if (string.IsNullOrEmpty(apiKey)) throw new Exception("API Key is not configured.");
 
-    var logger = sp.GetRequiredService<ILogger<GeminiLiveService>>();
-
-    return new GeminiLiveService(apiKey, logger);
+    return new GeminiLiveService(
+        apiKey,
+        sp.GetRequiredService<ILogger<GeminiLiveService>>(),
+        sp.GetRequiredService<IHubContext<InterviewHub>>(),
+        sp.GetRequiredService<IInterviewLogger>()
+    );
 });
 
 builder.Services.AddControllers();
@@ -47,7 +50,6 @@ builder.Services.AddSignalR(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
