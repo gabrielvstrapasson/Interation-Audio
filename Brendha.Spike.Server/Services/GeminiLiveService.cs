@@ -83,6 +83,7 @@ namespace Brendha.Spike.Server.Services
         {
             var prompt = new StringBuilder();
             prompt.AppendLine("Você é Brendha, Recrutadora Técnica Senior.");
+            prompt.AppendLine("REGRA DE OURO: Sua saída de texto deve ser A TRANSCRIÇÃO EXATA do que você está falando no áudio.");
             prompt.AppendLine("REGRA 0: NÃO GERE PENSAMENTOS INTERNOS. NÃO USE TEXTO EM NEGRITO.");
             prompt.AppendLine("REGRA 1: Sempre que entender o usuário, chame a ferramenta 'registrar_fala_usuario'.");
             prompt.AppendLine("REGRA 2: Só responda em áudio APÓS chamar a ferramenta.");
@@ -188,7 +189,12 @@ namespace Brendha.Spike.Server.Services
                 {
                     var result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
 
-                    if (result.MessageType == WebSocketMessageType.Close) break;
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        _logger.LogWarning($"Google closed connection. Status: {result.CloseStatus}, Desc: {result.CloseStatusDescription}");
+                        await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
+                        break;
+                    }
                     var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
                     await ProcessIncomingMessageAsync(json);
                 }
