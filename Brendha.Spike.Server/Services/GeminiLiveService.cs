@@ -122,21 +122,18 @@ namespace Brendha.Spike.Server.Services
         {
 
             var baseInstruction = @"
-        Você é Brendha, uma Recrutadora Técnica Senior.
-        Sua missão é entrevistar o candidato para uma vaga Júnior.
-        
-        REGRAS CRÍTICAS DE RESPOSTA:
-        1. NÃO gere pensamentos internos, planejamentos ou textos em negrito (ex: **Acknowledge**).
-        2. NÃO explique sua estratégia.
-        3. Apenas FALE a resposta direta para o candidato.
-        4. Mantenha respostas curtas (máximo 2 frases).
-        5. Aja naturalmente, como uma chamada de voz real.
-
-        Comportamento:
-        1. Se apresente brevemente na primeira fala.
-        2. Apresenta a vaga e peça para o usuário se apresentar (Nome, idade).
-        2. Faça UMA pergunta técnica por vez.
-        3. Tópicos: Back-end, C#, API.";
+                Você é Brendha, Recrutadora Técnica Senior.
+                
+                REGRAS CRÍTICAS DE FUNCIONAMENTO:
+                1. MUTE SEUS PENSAMENTOS: Não gere texto de saída explicando o que você vai fazer (ex: **Initiating**, I've registered...).
+                2. ESCUTA ATIVA: Assim que o usuário terminar de falar e você entender, CHAME IMEDIATAMENTE a função 'registrar_fala_usuario' com o texto exato.
+                3. SEQUÊNCIA: 
+                   - Ouvir Áudio -> Chamar Tool (registrar_fala_usuario) -> Gerar Áudio de Resposta.
+                
+                Comportamento:
+                - Seja profissional e direta.
+                - Respostas curtas (estilo conversa de voz).
+                - Uma pergunta técnica por vez.";
 
             if (_conversationHistory.Length > 0)
             {
@@ -183,7 +180,7 @@ namespace Brendha.Spike.Server.Services
                                         type = "OBJECT",
                                         properties = new
                                         {
-                                            texto_entedido = new {type = "STRING", description = "A transição exata ou resumo do que p candidato disse."}
+                                            texto_entedido = new {type = "STRING", description = "A transição exata do que p candidato disse."}
                                         },
                                         required = new[] {"texto_entedido"}
                                     }
@@ -233,8 +230,15 @@ namespace Brendha.Spike.Server.Services
                                 {
                                     if (part.TryGetProperty("text", out var textElement))
                                     {
-                                        string texto = textElement.GetString();
-                                        if (!string.IsNullOrWhiteSpace(texto))
+                                        string texto = textElement.GetString() ?? "";
+
+                                        bool ehPensamento = texto.StartsWith("**") ||
+                                                    texto.StartsWith("I've") ||
+                                                    texto.StartsWith("I'm") ||
+                                                    texto.StartsWith("Thinking") ||
+                                                    texto.StartsWith("Initiating");
+
+                                        if (!string.IsNullOrWhiteSpace(texto) && !ehPensamento)
                                         {
 
                                             _logger.LogWarning($"Brendha: {texto}");
@@ -297,13 +301,13 @@ namespace Brendha.Spike.Server.Services
                     string name = call.GetProperty("name").GetString();
                     string callId = call.GetProperty("id").GetString();
 
-                    if (name == "register_fala_usuario")
+                    if (name == "registrar_fala_usuario")
                     {
                         var args = call.GetProperty("args");
                         if (args.TryGetProperty("texto_entendido", out var textoElement))
                         {
                             string textoEntendido = textoElement.GetString();
-                            _logger.LogInformation($"Entendido: {textoEntendido}");
+                            _logger.LogInformation($"Candidato: {textoEntendido}");
                             await SaveToLogAsync("Candidato: ", textoEntendido);
                         }
                     }
