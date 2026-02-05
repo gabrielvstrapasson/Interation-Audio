@@ -224,7 +224,7 @@ namespace Brendha.Spike.Server.Services
                     {
                         var text = txtElement.GetString();
                         await _interviewLogger.LogAsync("Candidato:", text ?? "");
-                        _logger.LogInformation($"Entendido: {text}");
+                        _logger.LogInformation($"Candidato: {text}");
                     }
                 }
 
