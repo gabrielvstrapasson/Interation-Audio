@@ -1,6 +1,9 @@
-﻿using Brendha.Spike.Core.Models.Gemini;
+﻿using Brendha.Spike.Core.Models;
+using Brendha.Spike.Core.Models.Gemini;
 using Brendha.Spike.Server.Hubs;
 using Brendha.Spike.Server.Infrastructure.Interfaces;
+using Brendha.Spike.Server.Services.Data;
+using Brendha.Spike.Server.Services.Prompt;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.AspNetCore.SignalR;
 using System.Diagnostics;
@@ -69,7 +72,10 @@ namespace Brendha.Spike.Server.Services
             _sessionEndTime = DateTime.UtcNow.AddMinutes(10);
             await _hubContext.Clients.All.SendAsync("SessionStarted", GetTimeRemaining());
 
-            var config = CreateSetupConfig();
+            var job = JobMockService.GetCurrentJob();
+
+            var config = CreateSetupConfig(job);
+
             var options = new JsonSerializerOptions
             {
                 PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -79,20 +85,11 @@ namespace Brendha.Spike.Server.Services
             await SendJsonAsync(JsonSerializer.Serialize(config, options));
             _logger.LogInformation("Start Session");
         }
-        private GeminiSetupRequest CreateSetupConfig()
+        private GeminiSetupRequest CreateSetupConfig(JobPosition job)
         {
-            var prompt = new StringBuilder();
-            prompt.AppendLine("Você é Brendha, Recrutadora Técnica Senior.");
-            prompt.AppendLine("REGRA DE OURO: Sua saída de texto deve ser A TRANSCRIÇÃO EXATA do que você está falando no áudio.");
-            prompt.AppendLine("REGRA 0: NÃO GERE PENSAMENTOS INTERNOS. NÃO USE TEXTO EM NEGRITO.");
-            prompt.AppendLine("REGRA 1: Sempre que entender o usuário, chame a ferramenta 'registrar_fala_usuario'.");
-            prompt.AppendLine("REGRA 2: Só responda em áudio APÓS chamar a ferramenta.");
 
             var history = _interviewLogger.GetHistory();
-            if (!string.IsNullOrEmpty(history))
-            {
-                prompt.AppendLine($"\n[RECONEXÃO - HISTÓRICO]:\n{history}\nContinue a entrevista.");
-            }
+            var systemInstructionText = BrendhaPromptFactory.Build(job, history);
 
             return new GeminiSetupRequest(new GeminiSetup(
                 Model: "models/gemini-2.5-flash-native-audio-latest",
@@ -100,7 +97,7 @@ namespace Brendha.Spike.Server.Services
                     ResponseModalities: new[] { "AUDIO" },
                     SpeechConfig: new SpeechConfig(new VoiceConfig(new PrebuiltVoiceConfig("Aoede")))
                     ),
-                    SystemInstruction: new SystemInstruction(new[] { new Part(prompt.ToString()) }),
+                    SystemInstruction: new SystemInstruction(new[] { new Part(systemInstructionText) }),
                     Tools: new List<Tool>
                     {
                         new Tool(new List<FunctionDeclaration>
