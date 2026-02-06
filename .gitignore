@@ -371,3 +371,4 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/Brendha.Spike.Server/logs_interview
