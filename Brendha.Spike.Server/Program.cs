@@ -5,6 +5,7 @@ using Brendha.Spike.Server.Services;
 using Brendha.Spike.Server.Workers;
 using DotNetEnv;
 using Microsoft.AspNetCore.SignalR;
+using System.Text.Json;
 
 Env.Load();
 var builder = WebApplication.CreateBuilder(args);
@@ -27,7 +28,12 @@ builder.Services.AddSingleton<GeminiLiveService>(sp =>
     );
 });
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    });
+
 builder.Services.AddHostedService<AudioProcessorWorker>();
 builder.Services.AddOpenApi();
 

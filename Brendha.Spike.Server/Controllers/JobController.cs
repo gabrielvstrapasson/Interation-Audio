@@ -6,7 +6,7 @@ namespace Brendha.Spike.Server.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class JobContoller : ControllerBase
+    public class JobController : ControllerBase
     {
         [HttpGet]
         public IActionResult GetCurrentJob()

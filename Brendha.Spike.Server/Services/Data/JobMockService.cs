@@ -26,6 +26,13 @@ namespace Brendha.Spike.Server.Services.Data
                     "Kubernetes (AKS)",
                     "OpenTelemetry",
                     "Redis"
+                },
+                Benefits = new[]
+                {
+                    "Home Office",
+                    "Horário Flexível",
+                    "Plano de Saúde",
+                    "Vale Refeição"
                 }
             };
         }

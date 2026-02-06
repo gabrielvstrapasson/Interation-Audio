@@ -12,5 +12,6 @@ namespace Brendha.Spike.Core.Models
         public string[] NiceToHaveSkills { get; set; }
         public string Description { get; set; }
         public string SalaryRange { get; set; }
+        public string[] Benefits { get; set; }
     }
 }
