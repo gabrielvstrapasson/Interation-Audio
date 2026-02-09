@@ -54,6 +54,9 @@ builder.Services.AddSignalR(options =>
     options.EnableDetailedErrors = true;
 });
 
+builder.Services.AddHttpClient(); 
+builder.Services.AddScoped<ResumeProcessingService>();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())

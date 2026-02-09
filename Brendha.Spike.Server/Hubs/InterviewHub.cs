@@ -9,6 +9,12 @@ namespace Brendha.Spike.Server.Hubs
         ILogger<InterviewHub> logger,
         GeminiLiveService geminiService) : Hub
     {
+
+        public async Task StartInterview(string resumeJson)
+        {
+            logger.LogInformation($"[Hub] Recebido comando StartInterview. Payload presente: {!string.IsNullOrEmpty(resumeJson)}");
+            await geminiService.ConnectAsync(resumeJson);
+        }
         public async Task SendAudioChunk(string base64data)
         {
             try

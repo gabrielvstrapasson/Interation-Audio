@@ -4,16 +4,11 @@ using Brendha.Spike.Server.Hubs;
 using Brendha.Spike.Server.Infrastructure.Interfaces;
 using Brendha.Spike.Server.Services.Data;
 using Brendha.Spike.Server.Services.Prompt;
-using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.AspNetCore.SignalR;
 using System.Diagnostics;
 using System.Net.WebSockets;
-using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Xml;
 
 namespace Brendha.Spike.Server.Services
 {
@@ -45,7 +40,7 @@ namespace Brendha.Spike.Server.Services
             _hubContext = hubContext;
             _interviewLogger = interviewLogger;
         }
-        public async Task ConnectAsync()
+        public async Task ConnectAsync(string resumeJson = null)
         {
             if (string.IsNullOrEmpty(_apiKey)) throw new Exception("API Key is missing");
 
@@ -57,7 +52,7 @@ namespace Brendha.Spike.Server.Services
                 _logger.LogInformation("Trying connect in Gemini..");
                 await _ws.ConnectAsync(new Uri($"{GeminiUrl}?key={_apiKey}"), CancellationToken.None);
 
-                await InitializeSessionAsync();
+                await InitializeSessionAsync(resumeJson);
                 await ReceiveLoopAsync();
             }
             catch (Exception ex)
@@ -67,29 +62,53 @@ namespace Brendha.Spike.Server.Services
             }
 
         }
-        private async Task InitializeSessionAsync()
+        private async Task InitializeSessionAsync(string resumeJson)
         {
             _sessionEndTime = DateTime.UtcNow.AddMinutes(10);
             await _hubContext.Clients.All.SendAsync("SessionStarted", GetTimeRemaining());
 
             var job = JobMockService.GetCurrentJob();
 
-            var config = CreateSetupConfig(job);
-
-            var options = new JsonSerializerOptions
+            string  resumeText = null;
+            if (!string.IsNullOrEmpty(resumeJson))
             {
-                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-            };
+                try
+                {
+                    using var doc = JsonDocument.Parse(resumeJson);
+                    if (doc.RootElement.TryGetProperty("resumeText", out var el) ||
+                        doc.RootElement.TryGetProperty("resume_text", out el))
+                    {
+                        resumeText = el.GetString();
+                        _logger.LogInformation($"[Resume SUCCESS] Texto carregado. Tamanho: {resumeText?.Length ?? 0} chars.");
+                    }
+                    else
+                    {
+                        _logger.LogWarning($"[Resume FAIL] JSON recebido mas propriedade 'resumeText' não encontrada. JSON: {resumeJson}");
+                    }
+                }
+                catch (Exception ex) { _logger.LogError($"Error reading JSON from FrontEnd: {ex.Message}"); }
+            }
+            else
+            {
+                _logger.LogInformation("[Resume INFO] Nenhum currículo enviado pelo Front.");
+            }
 
-            await SendJsonAsync(JsonSerializer.Serialize(config, options));
-            _logger.LogInformation("Start Session");
-        }
-        private GeminiSetupRequest CreateSetupConfig(JobPosition job)
+            var config = CreateSetupConfig(job, resumeText);
+
+                var options = new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+                    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+                };
+
+                await SendJsonAsync(JsonSerializer.Serialize(config, options));
+                _logger.LogInformation("Start Session");
+            }
+        private GeminiSetupRequest CreateSetupConfig(JobPosition job, string resumeText)
         {
 
             var history = _interviewLogger.GetHistory();
-            var systemInstructionText = BrendhaPromptFactory.Build(job, history);
+            var systemInstructionText = BrendhaPromptFactory.Build(job, resumeText, history);
 
             return new GeminiSetupRequest(new GeminiSetup(
                 Model: "models/gemini-2.5-flash-native-audio-latest",
@@ -239,7 +258,8 @@ namespace Brendha.Spike.Server.Services
         }
         private void DisposeWebScoket()
         {
-            if (_ws != null) {
+            if (_ws != null)
+            {
                 try { _ws.Dispose(); } catch { }
                 _ws = null;
             }
