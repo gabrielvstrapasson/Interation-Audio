@@ -2,6 +2,7 @@
 using Brendha.Spike.Server.Infrastructure;
 using Brendha.Spike.Server.Services;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging.EventLog;
 
 namespace Brendha.Spike.Server.Hubs
 {
@@ -12,7 +13,7 @@ namespace Brendha.Spike.Server.Hubs
 
         public async Task StartInterview(string resumeJson)
         {
-            logger.LogInformation($"[Hub] Recebido comando StartInterview. Payload presente: {!string.IsNullOrEmpty(resumeJson)}");
+            logger.LogInformation($"StartInterview. Payload: {!string.IsNullOrEmpty(resumeJson)}");
             await geminiService.ConnectAsync(resumeJson);
         }
         public async Task SendAudioChunk(string base64data)
@@ -54,7 +55,38 @@ namespace Brendha.Spike.Server.Hubs
         public async Task RequestSessionTimer()
         {
             var seconds = geminiService.GetTimeRemaining();
-            await Clients.Caller.SendAsync("SessionStarted", seconds);
+            await Clients.Caller.SendAsync("UpdateTimer", seconds);
+        }
+        public async Task UpdateResume(string resumeJson)
+        {
+            if (string.IsNullOrEmpty(resumeJson))
+            {
+                logger.LogWarning("Resume is empty");
+                return;
+            }
+            try
+            {
+                await geminiService.InjectResumeContextAsync(resumeJson);
+                logger.LogInformation("Resume send with successful in active session");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError($"Error to updated resume: {ex.Message}");
+            }
+        }
+        public async Task EndInterview()
+        {
+            try
+            {
+                await geminiService.DisconnectAsync();
+                await Clients.Caller.SendAsync("InterviewEnded");
+                logger.LogInformation("Interview ended successfully");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError($"Error ending interview: {ex.Message}");
+                throw;
+            }
         }
     }
 }

@@ -23,6 +23,7 @@ namespace Brendha.Spike.Server.Services
 
         private ClientWebSocket _ws;
         private DateTime _sessionEndTime;
+        private string _currentResumeText;
 
         private readonly Stopwatch _latencyWatch = new();
         private bool _isWaitingForFirstResponse = false;
@@ -52,7 +53,7 @@ namespace Brendha.Spike.Server.Services
                 _logger.LogInformation("Trying connect in Gemini..");
                 await _ws.ConnectAsync(new Uri($"{GeminiUrl}?key={_apiKey}"), CancellationToken.None);
 
-                await InitializeSessionAsync(resumeJson);
+                await InitializeSessionAsync();
                 await ReceiveLoopAsync();
             }
             catch (Exception ex)
@@ -62,48 +63,133 @@ namespace Brendha.Spike.Server.Services
             }
 
         }
-        private async Task InitializeSessionAsync(string resumeJson)
+
+        public async Task InjectResumeContextAsync(string resumeJson)
+        {
+            if (_ws?.State != WebSocketState.Open)
+            {
+                _logger.LogWarning("WebSocket is not open. Cannot inject resume context.");
+                return;
+            }
+            try
+            {
+                using var doc = JsonDocument.Parse(resumeJson);
+                if (doc.RootElement.TryGetProperty("resumeText", out var el) ||
+                    doc.RootElement.TryGetProperty("resume_text", out el))
+                {
+                    var resumeText = el.GetString();
+                    _currentResumeText = resumeText;
+
+                    _logger.LogInformation("Inject resume in conversation context");
+
+                    var contextMessage = $"User just send the resume." +
+                        $"Resume context: \n\n {resumeText}\n\n";
+
+                    var payload = new
+                    {
+                        client_content = new
+                        {
+                            turns = new[]
+        {
+                                new
+                                {
+                                    role = "user",
+                                    parts = new[]
+                                    {
+                                        new { text = contextMessage }
+                                    }
+                                }
+                            },
+                            turn_complete = true
+                        }
+                    };
+
+                    var options = new JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+                        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+                    };
+
+                    await SendJsonAsync(JsonSerializer.Serialize(payload, options));
+                    await _interviewLogger.LogAsync("System", "Resume updated with successfull in interview");
+
+                    _logger.LogInformation("Context injected with successfull!");
+                }
+                else
+                {
+                    _logger.LogWarning("Property resumeText not founded.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error to inject resume: {ex.Message}");
+            }
+
+
+        }
+        
+        public async Task AppendUserHistory(string text) => await _interviewLogger.LogAsync("System:", text);
+        public async Task SendAudioChunkAsync(byte[] audioData)
+        {
+            if (_ws?.State != WebSocketState.Open) return;
+
+            var payload = new RealtimeInputRequest(new RealtimeInput(new[]
+            {
+                new MediaChunk("audio/pcm", Convert.ToBase64String(audioData))
+            }));
+
+            if (!_aiIsSpeaking) { _latencyWatch.Restart(); _isWaitingForFirstResponse = true; }
+            await SendJsonAsync(JsonSerializer.Serialize(payload));
+        }
+        public double GetTimeRemaining()
+        {
+            var remaining = (_sessionEndTime - DateTime.UtcNow).TotalSeconds;
+            return remaining > 0 ? remaining : 0;
+        }
+        public void Dispose() => DisposeWebScoket();
+        public async Task DisconnectAsync()
+        {
+            try
+            {
+                _logger.LogInformation("Closing Gemini Connection");
+
+                if (_ws?.State == WebSocketState.Open)
+                {
+                    await _ws.CloseAsync(
+                        WebSocketCloseStatus.NormalClosure,
+                        "Interview ended by user",
+                        CancellationToken.None);
+                }
+
+                DisposeWebScoket();
+                await _interviewLogger.LogAsync("System", "Interview ended");
+
+                _logger.LogInformation("Gemini connection closed successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error closing Gemini connection: {ex.Message}");
+            }
+        }
+        private async Task InitializeSessionAsync()
         {
             _sessionEndTime = DateTime.UtcNow.AddMinutes(10);
             await _hubContext.Clients.All.SendAsync("SessionStarted", GetTimeRemaining());
 
             var job = JobMockService.GetCurrentJob();
 
-            string  resumeText = null;
-            if (!string.IsNullOrEmpty(resumeJson))
+            var config = CreateSetupConfig(job, null);
+
+            var options = new JsonSerializerOptions
             {
-                try
-                {
-                    using var doc = JsonDocument.Parse(resumeJson);
-                    if (doc.RootElement.TryGetProperty("resumeText", out var el) ||
-                        doc.RootElement.TryGetProperty("resume_text", out el))
-                    {
-                        resumeText = el.GetString();
-                        _logger.LogInformation($"[Resume SUCCESS] Texto carregado. Tamanho: {resumeText?.Length ?? 0} chars.");
-                    }
-                    else
-                    {
-                        _logger.LogWarning($"[Resume FAIL] JSON recebido mas propriedade 'resumeText' não encontrada. JSON: {resumeJson}");
-                    }
-                }
-                catch (Exception ex) { _logger.LogError($"Error reading JSON from FrontEnd: {ex.Message}"); }
-            }
-            else
-            {
-                _logger.LogInformation("[Resume INFO] Nenhum currículo enviado pelo Front.");
-            }
+                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+            };
+            var configJson = JsonSerializer.Serialize(config, options);
+            await SendJsonAsync(configJson);
 
-            var config = CreateSetupConfig(job, resumeText);
-
-                var options = new JsonSerializerOptions
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-                    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-                };
-
-                await SendJsonAsync(JsonSerializer.Serialize(config, options));
-                _logger.LogInformation("Start Session");
-            }
+            _logger.LogInformation("Start Session");
+        }
         private GeminiSetupRequest CreateSetupConfig(JobPosition job, string resumeText)
         {
 
@@ -136,24 +222,6 @@ namespace Brendha.Spike.Server.Services
                         })
                     }
                 ));
-        }
-        public async Task AppendUserHistory(string text) => await _interviewLogger.LogAsync("System:", text);
-        public async Task SendAudioChunkAsync(byte[] audioData)
-        {
-            if (_ws?.State != WebSocketState.Open) return;
-
-            var payload = new RealtimeInputRequest(new RealtimeInput(new[]
-            {
-                new MediaChunk("audio/pcm", Convert.ToBase64String(audioData))
-            }));
-
-            if (!_aiIsSpeaking) { _latencyWatch.Restart(); _isWaitingForFirstResponse = true; }
-            await SendJsonAsync(JsonSerializer.Serialize(payload));
-        }
-        public double GetTimeRemaining()
-        {
-            var remaining = (_sessionEndTime - DateTime.UtcNow).TotalSeconds;
-            return remaining > 0 ? remaining : 0;
         }
         private async Task ProcessIncomingMessageAsync(string json)
         {
@@ -264,6 +332,5 @@ namespace Brendha.Spike.Server.Services
                 _ws = null;
             }
         }
-        public void Dispose() => DisposeWebScoket();
     }
 }
