@@ -13,8 +13,9 @@ namespace Brendha.Spike.Server.Hubs
 
         public async Task StartInterview(string resumeJson)
         {
-            logger.LogInformation($"StartInterview. Payload: {!string.IsNullOrEmpty(resumeJson)}");
-            await geminiService.ConnectAsync(resumeJson);
+            logger.LogInformation($"StartInterview called");
+            await geminiService.ConnectAsync(enableAutoReconnect: true);
+            logger.LogInformation("Interview started successfully");
         }
         public async Task SendAudioChunk(string base64data)
         {

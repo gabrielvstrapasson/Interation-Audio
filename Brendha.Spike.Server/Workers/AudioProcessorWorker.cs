@@ -5,12 +5,11 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace Brendha.Spike.Server.Workers
 {
-    public class AudioProcessorWorker ( ILogger<AudioProcessorWorker> logger, 
-                                        AudioStreamBuffer buffer,
-                                        GeminiLiveService geminiLiveService,
-                                        IHubContext<InterviewHub> hubContext) : BackgroundService
+    public class AudioProcessorWorker(ILogger<AudioProcessorWorker> logger,
+                                      AudioStreamBuffer buffer,
+                                      GeminiLiveService geminiLiveService,
+                                      IHubContext<InterviewHub> hubContext) : BackgroundService
     {
-
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             geminiLiveService.OnAudioReceived += async (audioBytes) =>
@@ -18,32 +17,53 @@ namespace Brendha.Spike.Server.Workers
                 await hubContext.Clients.All.SendAsync("ReceiveAudio", audioBytes, stoppingToken);
             };
 
-            _ = Task.Run(async () =>
+            var audioTask = Task.Run(async () =>
             {
                 await foreach (var packet in buffer.ReadAllAsync(stoppingToken))
                 {
-                    await geminiLiveService.SendAudioChunkAsync(packet.Payload);
+                    try
+                    {
+                        if (geminiLiveService.IsConnected)
+                        {
+                            await geminiLiveService.SendAudioChunkAsync(packet.Payload);
+                        }
+                        else
+                        {
+                            logger.LogDebug("Gemini disconnected, skipping audio packet");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Error sending audio chunk");
+                    }
                 }
             }, stoppingToken);
 
-
-            while (!stoppingToken.IsCancellationRequested)
+            var reconnectTask = Task.Run(async () =>
             {
-                try
+                while (!stoppingToken.IsCancellationRequested)
                 {
-                    await geminiLiveService.ConnectAsync();
-                    logger.LogWarning("Connection with Gemini is down, retrying...");
+                    try
+                    {
+
+                        if (!geminiLiveService.IsConnected && geminiLiveService.AllowAutoReconnect)
+                        {
+                            logger.LogWarning("Gemini disconnected (10min timeout), reconnecting...");
+                            await geminiLiveService.ConnectAsync(enableAutoReconnect: true);
+                            logger.LogInformation("Reconnected to Gemini successfully");
+                        }
+
+                        await Task.Delay(3000, stoppingToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Error in reconnection loop");
+                        await Task.Delay(5000, stoppingToken);
+                    }
                 }
-                catch
-                {
-                    logger.LogCritical("Failed to connect to Gemini Live Service.");
-                    await Task.Delay(5000, stoppingToken);
-                }
-                if (!stoppingToken.IsCancellationRequested)
-                {
-                    await Task.Delay(2000, stoppingToken);
-                }
-            }
+            }, stoppingToken);
+
+            await Task.WhenAll(audioTask, reconnectTask);
         }
     }
 }

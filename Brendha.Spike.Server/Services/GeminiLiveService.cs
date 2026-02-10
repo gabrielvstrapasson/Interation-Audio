@@ -22,14 +22,20 @@ namespace Brendha.Spike.Server.Services
         private readonly IInterviewLogger _interviewLogger;
 
         private ClientWebSocket _ws;
+        private readonly SemaphoreSlim _wsSemaphore = new(1, 1);
         private DateTime _sessionEndTime;
         private string _currentResumeText;
+
+        private bool _allowAutoReconnect = false;
 
         private readonly Stopwatch _latencyWatch = new();
         private bool _isWaitingForFirstResponse = false;
         private bool _aiIsSpeaking = false;
+        private bool _isDisposed = false;
 
         public event Func<byte[], Task>? OnAudioReceived;
+
+        public bool IsConnected => _ws?.State == WebSocketState.Open;
 
         public GeminiLiveService(string apiKey,
             ILogger<GeminiLiveService> logger,
@@ -41,29 +47,61 @@ namespace Brendha.Spike.Server.Services
             _hubContext = hubContext;
             _interviewLogger = interviewLogger;
         }
-        public async Task ConnectAsync(string resumeJson = null)
+        public async Task ConnectAsync(string resumeJson = null, bool enableAutoReconnect = false)
         {
             if (string.IsNullOrEmpty(_apiKey)) throw new Exception("API Key is missing");
+            if (_isDisposed) throw new ObjectDisposedException(nameof(GeminiLiveService));
 
-            Dispose();
-            _ws = new ClientWebSocket();
+            if (_ws?.State == WebSocketState.Open)
+            {
+                _logger.LogInformation("WebSocket already connected");
+                return;
+            }
 
+            await _wsSemaphore.WaitAsync();
             try
             {
+                if (_ws?.State == WebSocketState.Open)
+                {
+                    _logger.LogInformation("WebSocket already connected");
+                    return;
+                }
+
+                DisposeWebSocketInternal();
+                _ws = new ClientWebSocket();
+                _allowAutoReconnect = enableAutoReconnect;
+
                 _logger.LogInformation("Trying connect in Gemini..");
                 await _ws.ConnectAsync(new Uri($"{GeminiUrl}?key={_apiKey}"), CancellationToken.None);
 
-                await InitializeSessionAsync();
-                await ReceiveLoopAsync();
+                _logger.LogInformation("WebSocket connected, initializing session...");
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Fail for connect in API: {ex.Message}");
+                DisposeWebSocketInternal();
                 throw;
             }
+            finally
+            {
+                _wsSemaphore.Release();
+            }
 
+            try
+            {
+                await InitializeSessionAsync();
+                _ = Task.Run(ReceiveLoopAsync);
+                _logger.LogInformation("Gemini connection established successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Failed to initialize session: {ex.Message}");
+                await DisconnectAsync();
+                throw;
+            }
         }
 
+        public bool AllowAutoReconnect => _allowAutoReconnect;
         public async Task InjectResumeContextAsync(string resumeJson)
         {
             if (_ws?.State != WebSocketState.Open)
@@ -127,7 +165,7 @@ namespace Brendha.Spike.Server.Services
 
 
         }
-        
+
         public async Task AppendUserHistory(string text) => await _interviewLogger.LogAsync("System:", text);
         public async Task SendAudioChunkAsync(byte[] audioData)
         {
@@ -146,31 +184,46 @@ namespace Brendha.Spike.Server.Services
             var remaining = (_sessionEndTime - DateTime.UtcNow).TotalSeconds;
             return remaining > 0 ? remaining : 0;
         }
-        public void Dispose() => DisposeWebScoket();
+        public void Dispose()
+        {
+            if (_isDisposed) return;
+            _isDisposed = true;
+            DisposeWebSocketInternal();
+            _wsSemaphore?.Dispose();
+        }
         public async Task DisconnectAsync()
         {
             try
             {
                 _logger.LogInformation("Closing Gemini Connection");
-
-                if (_ws?.State == WebSocketState.Open)
+                await _wsSemaphore.WaitAsync();
+                try
                 {
-                    await _ws.CloseAsync(
-                        WebSocketCloseStatus.NormalClosure,
-                        "Interview ended by user",
-                        CancellationToken.None);
+                    if (_ws?.State == WebSocketState.Open)
+                    {
+                        await _ws.CloseAsync(
+                            WebSocketCloseStatus.NormalClosure,
+                            "Interview ended by user",
+                            CancellationToken.None);
+                    }
+
+                    DisposeWebSocketInternal();
+                }
+                finally
+                {
+                    _wsSemaphore.Release();
                 }
 
-                DisposeWebScoket();
                 await _interviewLogger.LogAsync("System", "Interview ended");
-
                 _logger.LogInformation("Gemini connection closed successfully");
             }
+
             catch (Exception ex)
             {
                 _logger.LogError($"Error closing Gemini connection: {ex.Message}");
             }
         }
+
         private async Task InitializeSessionAsync()
         {
             _sessionEndTime = DateTime.UtcNow.AddMinutes(10);
@@ -186,9 +239,15 @@ namespace Brendha.Spike.Server.Services
                 DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
             };
             var configJson = JsonSerializer.Serialize(config, options);
-            await SendJsonAsync(configJson);
+            await SendJsonInternalAsync(configJson);
 
             _logger.LogInformation("Start Session");
+        }
+        private async Task SendJsonInternalAsync(string json)
+        {
+            if (_ws?.State != WebSocketState.Open) return;
+            var bytes = Encoding.UTF8.GetBytes(json);
+            await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
         }
         private GeminiSetupRequest CreateSetupConfig(JobPosition job, string resumeText)
         {
@@ -267,20 +326,40 @@ namespace Brendha.Spike.Server.Services
         private async Task ReceiveLoopAsync()
         {
             var buffer = new byte[1024 * 64];
-            while (_ws?.State == WebSocketState.Open)
+            while (!_isDisposed)
             {
                 try
                 {
+                    if (_ws?.State != WebSocketState.Open)
+                        break;
                     var result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
 
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
                         _logger.LogWarning($"Google closed connection. Status: {result.CloseStatus}, Desc: {result.CloseStatusDescription}");
-                        await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
+
+                        await _wsSemaphore.WaitAsync();
+                        try
+                        {
+                            if (_ws?.State == WebSocketState.Open || _ws?.State == WebSocketState.CloseReceived)
+                            {
+                                await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
+                            }
+                        }
+                        finally
+                        {
+                            _wsSemaphore.Release();
+                        }
                         break;
                     }
+
                     var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
                     await ProcessIncomingMessageAsync(json);
+                }
+                catch (WebSocketException wsEx)
+                {
+                    _logger.LogError($"WebSocket error in receive loop: {wsEx.Message}");
+                    break;
                 }
                 catch (Exception ex)
                 {
@@ -289,6 +368,17 @@ namespace Brendha.Spike.Server.Services
                 }
             }
 
+            await _wsSemaphore.WaitAsync();
+            try
+            {
+                DisposeWebSocketInternal();
+            }
+            finally
+            {
+                _wsSemaphore.Release();
+            }
+
+            _logger.LogInformation("Receive loop ended");
         }
         private async Task HandleToolCallAsync(JsonElement toolCall)
         {
@@ -320,16 +410,23 @@ namespace Brendha.Spike.Server.Services
         }
         private async Task SendJsonAsync(string json)
         {
-            if (_ws?.State != WebSocketState.Open) return;
-            var bytes = Encoding.UTF8.GetBytes(json);
-            await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+            await _wsSemaphore.WaitAsync();
+            try
+            {
+                await SendJsonInternalAsync(json);
+            }
+            finally
+            {
+                _wsSemaphore.Release();
+            }
         }
-        private void DisposeWebScoket()
+        private void DisposeWebSocketInternal()
         {
             if (_ws != null)
             {
-                try { _ws.Dispose(); } catch { }
-                _ws = null;
+                try { _ws.Dispose(); }
+                catch { }
+                finally { _ws = null; }
             }
         }
     }
