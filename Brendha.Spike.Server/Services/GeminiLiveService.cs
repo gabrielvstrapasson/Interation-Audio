@@ -55,6 +55,11 @@ namespace Brendha.Spike.Server.Services
             if (_ws?.State == WebSocketState.Open)
             {
                 _logger.LogInformation("WebSocket already connected");
+
+                if (!enableAutoReconnect)
+                {
+                    await _hubContext.Clients.All.SendAsync("SessionStarted", GetTimeRemaining());
+                }
                 return;
             }
 
@@ -64,6 +69,11 @@ namespace Brendha.Spike.Server.Services
                 if (_ws?.State == WebSocketState.Open)
                 {
                     _logger.LogInformation("WebSocket already connected");
+
+                    if (!enableAutoReconnect)
+                    {
+                        await _hubContext.Clients.All.SendAsync("SessionStarted", GetTimeRemaining());
+                    }
                     return;
                 }
 
@@ -196,6 +206,8 @@ namespace Brendha.Spike.Server.Services
             try
             {
                 _logger.LogInformation("Closing Gemini Connection");
+                _allowAutoReconnect = false;
+
                 await _wsSemaphore.WaitAsync();
                 try
                 {
