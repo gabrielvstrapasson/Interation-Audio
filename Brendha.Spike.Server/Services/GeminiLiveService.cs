@@ -265,7 +265,7 @@ namespace Brendha.Spike.Server.Services
         {
 
             var history = _interviewLogger.GetHistory();
-            var systemInstructionText = BrendhaPromptFactory.Build(job, resumeText, history);
+            var systemInstructionText = BrendhaPromptInterview.Build(job, resumeText, history);
 
             return new GeminiSetupRequest(new GeminiSetup(
                 Model: "models/gemini-2.5-flash-native-audio-latest",
