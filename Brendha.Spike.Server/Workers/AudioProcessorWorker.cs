@@ -45,15 +45,24 @@ namespace Brendha.Spike.Server.Workers
                 {
                     try
                     {
-
+                        await Task.Delay(5000, stoppingToken);
                         if (!geminiLiveService.IsConnected && geminiLiveService.AllowAutoReconnect)
                         {
                             logger.LogWarning("Gemini disconnected (10min timeout), reconnecting...");
-                            await geminiLiveService.ConnectAsync(enableAutoReconnect: true);
-                            logger.LogInformation("Reconnected to Gemini successfully");
+                            try
+                            {
+                                await geminiLiveService.ConnectAsync(enableAutoReconnect: true);
+                                logger.LogInformation("Reconnected to Gemini successfully");
+                            }
+                            catch (Exception ex)
+                            {
+                                logger.LogError(ex, "Reconnection attempt failed");
+                            }
                         }
-
-                        await Task.Delay(3000, stoppingToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
                     }
                     catch (Exception ex)
                     {

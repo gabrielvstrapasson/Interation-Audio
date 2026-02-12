@@ -36,6 +36,15 @@ namespace Brendha.Spike.Server.Services.Prompt
 
                 candidate_resume = hasResume ? resumeText : "STATUS: WAITING_FOR_RESUME_UPLOAD",
 
+                output_rules = new
+                {
+                    no_thinking_aloud = "CRITICAL: NEVER output internal thoughts, reasoning, or process descriptions. NO text like '**Assessing**', '**Thinking**', '**Formulating**', etc.",
+                    audio_only = "Generate ONLY the actual interview dialogue. Speak directly to the candidate.",
+                    no_markdown = "Do NOT use markdown formatting (**, ##, etc.) in audio responses.",
+                    direct_speech = "Output ONLY what you would say out loud to the candidate. Nothing else."
+                },
+
+
                 interview_rules = new
                 {
                     resume_policy = "BLOCKER: Without a resume ('candidate_resume' contains 'WAITING'), you CANNOT start the interview. You must ONLY ask for the upload.",
@@ -67,15 +76,23 @@ namespace Brendha.Spike.Server.Services.Prompt
 
                 operational_protocol = new
                 {
-                    tool = "Call 'registrar_fala_usuario' immediately after user speech.",
-                    audio = "Generate audio only AFTER tool execution."
+                    tool_user_speech = "Call 'registrar_fala_usuario' immediately AFTER user finishes speaking.",
+                    tool_ai_question = "Call 'registrar_pergunta_ia' immediately AFTER you formulate and BEFORE you speak each question/statement to the candidate. Pass the exact text you're about to say.",
+                    audio = "Generate audio only AFTER calling 'registrar_pergunta_ia'.",
+                    workflow = "SEQUENCE: 1) Formulate question silently → 2) Call 'registrar_pergunta_ia' with question text → 3) Generate audio of that question → 4) Wait for user response → 5) Call 'registrar_fala_usuario' with user's speech → 6) Repeat"
                 },
 
                 execution_command = isNewSession
                     ? (hasResume
-                        ? "ACTION: START. 1) Greet: 'Olá, [Nome]. Sou a Brendha, recrutadora tech. Tudo bem?' 2) Context: 'Vamos conversar sobre a vaga de [Title]. Li seu currículo e tenho algumas perguntas.' 3) First question: Ask about a key mandatory skill NOT deeply detailed in resume."
-                        : "ACTION: BLOCK. 1) Greet: 'Olá! Sou a Brendha, recrutadora da vaga de [Title].' 2) Request: 'Para iniciarmos, preciso que você envie seu currículo pelo botão de upload.' 3) Wait (no questions).")
-                    : "ACTION: CONTINUE. Check resume status. If present, continue interview flow. If still missing, politely insist on upload. Do NOT give feedback."
+                        ? "ACTION: START. " +
+                           "1) Call 'registrar_pergunta_ia' with: 'Olá, [Nome]. Sou a Brendha, recrutadora tech. Tudo bem?' → speak it. " +
+                           "2) After user responds, call 'registrar_pergunta_ia' with: 'Vamos conversar sobre a vaga de [Title]. Li seu currículo.' → speak it. " +
+                           "3) Then ask your first technical question using the same pattern: call tool → speak."
+                        : "ACTION: BLOCK. " +
+                           "1) Call 'registrar_pergunta_ia' with: 'Olá! Sou a Brendha, recrutadora da vaga de [Title].' → speak it. " +
+                           "2) Call 'registrar_pergunta_ia' with: 'Para iniciarmos, preciso que você envie seu currículo pelo botão de upload.' → speak it. " +
+                           "3) Wait.")
+                    : "ACTION: CONTINUE. Use 'registrar_pergunta_ia' before each question you ask. Check resume status silently, then ask next question."
             };
 
 
