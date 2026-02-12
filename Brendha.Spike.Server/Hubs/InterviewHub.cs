@@ -11,11 +11,26 @@ namespace Brendha.Spike.Server.Hubs
         GeminiLiveService geminiService) : Hub
     {
 
-        public async Task StartInterview(string resumeJson)
+        public async Task StartInterview()
         {
-            logger.LogInformation($"StartInterview called");
+            logger.LogInformation($"StartInterview called from connectionId: {Context.ConnectionId}");
+
+            if (!geminiService.HasResume)
+            {
+                logger.LogWarning("Attempt to start interview without reusme");
+                await Clients.Caller.SendAsync("ResumeRequired", "Please upload your resume before starting the interview.");
+                return;
+            }
+            try
+            {
             await geminiService.ConnectAsync(enableAutoReconnect: true);
             logger.LogInformation("Interview started successfully");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error starting interview");
+                await Clients.Caller.SendAsync("Error", $"Failed to start interview: {ex.Message}");
+            }
         }
         public async Task SendAudioChunk(string base64data)
         {
@@ -58,21 +73,23 @@ namespace Brendha.Spike.Server.Hubs
             var seconds = geminiService.GetTimeRemaining();
             await Clients.Caller.SendAsync("UpdateTimer", seconds);
         }
-        public async Task UpdateResume(string resumeJson)
+        public async Task UploadResume(string resumeJson)
         {
             if (string.IsNullOrEmpty(resumeJson))
             {
-                logger.LogWarning("Resume is empty");
+                await Clients.Caller.SendAsync("ResumeUploadFailed", "Resume data is empty.");
                 return;
             }
+
             try
             {
-                await geminiService.InjectResumeContextAsync(resumeJson);
+                await geminiService.SetResumeAsync(resumeJson);
                 logger.LogInformation("Resume send with successful in active session");
             }
             catch (Exception ex)
             {
                 logger.LogError($"Error to updated resume: {ex.Message}");
+                await Clients.Caller.SendAsync("ResumeUploadFailed", "Failed to upload resume:", ex.Message);
             }
         }
         public async Task EndInterview()

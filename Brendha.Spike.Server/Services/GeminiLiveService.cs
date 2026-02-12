@@ -24,6 +24,8 @@ namespace Brendha.Spike.Server.Services
         private ClientWebSocket _ws;
         private readonly SemaphoreSlim _wsSemaphore = new(1, 1);
         private DateTime _sessionEndTime;
+
+        private string _pendingResumeText;
         private string _currentResumeText;
 
         private bool _allowAutoReconnect = false;
@@ -36,6 +38,7 @@ namespace Brendha.Spike.Server.Services
         public event Func<byte[], Task>? OnAudioReceived;
 
         public bool IsConnected => _ws?.State == WebSocketState.Open;
+        public bool HasResume => !string.IsNullOrWhiteSpace(_pendingResumeText) || !string.IsNullOrWhiteSpace(_currentResumeText);
 
         public GeminiLiveService(string apiKey,
             ILogger<GeminiLiveService> logger,
@@ -47,7 +50,7 @@ namespace Brendha.Spike.Server.Services
             _hubContext = hubContext;
             _interviewLogger = interviewLogger;
         }
-        public async Task ConnectAsync(string resumeJson = null, bool enableAutoReconnect = false)
+        public async Task ConnectAsync(bool enableAutoReconnect = false)
         {
             if (string.IsNullOrEmpty(_apiKey)) throw new Exception("API Key is missing");
             if (_isDisposed) throw new ObjectDisposedException(nameof(GeminiLiveService));
@@ -99,6 +102,12 @@ namespace Brendha.Spike.Server.Services
 
             try
             {
+                if (!string.IsNullOrWhiteSpace(_pendingResumeText))
+                {
+                    _currentResumeText = _pendingResumeText;
+                    _logger.LogInformation("Resume loaded into interview context");
+                }
+
                 await InitializeSessionAsync();
                 _ = Task.Run(ReceiveLoopAsync);
                 _logger.LogInformation("Gemini connection established successfully");
@@ -112,70 +121,41 @@ namespace Brendha.Spike.Server.Services
         }
 
         public bool AllowAutoReconnect => _allowAutoReconnect;
-        public async Task InjectResumeContextAsync(string resumeJson)
+
+     
+        public async Task SetResumeAsync(string resumeJson)
         {
-            if (_ws?.State != WebSocketState.Open)
+            if (string.IsNullOrWhiteSpace(resumeJson))
             {
-                _logger.LogWarning("WebSocket is not open. Cannot inject resume context.");
+                _logger.LogWarning("Received empty resume JSON.");
                 return;
             }
+
             try
             {
                 using var doc = JsonDocument.Parse(resumeJson);
                 if (doc.RootElement.TryGetProperty("resumeText", out var el) ||
                     doc.RootElement.TryGetProperty("resume_text", out el))
                 {
-                    var resumeText = el.GetString();
-                    _currentResumeText = resumeText;
+                    _pendingResumeText = el.GetString();
+                    _logger.LogInformation("Resume set successfully. Ready to start interview");
 
-                    _logger.LogInformation("Inject resume in conversation context");
-
-                    var contextMessage = $"User just send the resume." +
-                        $"Resume context: \n\n {resumeText}\n\n";
-
-                    var payload = new
-                    {
-                        client_content = new
-                        {
-                            turns = new[]
-        {
-                                new
-                                {
-                                    role = "user",
-                                    parts = new[]
-                                    {
-                                        new { text = contextMessage }
-                                    }
-                                }
-                            },
-                            turn_complete = true
-                        }
-                    };
-
-                    var options = new JsonSerializerOptions
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-                        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-                    };
-
-                    await SendJsonAsync(JsonSerializer.Serialize(payload, options));
-                    await _interviewLogger.LogAsync("System", "Resume updated with successfull in interview");
-
-                    _logger.LogInformation("Context injected with successfull!");
+                    await _hubContext.Clients.All.SendAsync("ResumeReceived", new { success = true });
                 }
                 else
                 {
-                    _logger.LogWarning("Property resumeText not founded.");
+                    _logger.LogWarning("Property 'resumeText' not found in JSON");
+                    await _hubContext.Clients.All.SendAsync("ResumeReceived", new { success = false, error = "Invalid format" });
                 }
             }
-            catch (Exception ex)
+            catch (JsonException ex)
             {
-                _logger.LogError($"Error to inject resume: {ex.Message}");
+                _logger.LogError($"Invalid JSON format for resume: {ex.Message}");
+                await _hubContext.Clients.All.SendAsync("ResumeReceived", new { success = false, error = "Invalid JSON" });
             }
 
 
         }
-
         public async Task AppendUserHistory(string text) => await _interviewLogger.LogAsync("System:", text);
         public async Task SendAudioChunkAsync(byte[] audioData)
         {
@@ -235,7 +215,6 @@ namespace Brendha.Spike.Server.Services
                 _logger.LogError($"Error closing Gemini connection: {ex.Message}");
             }
         }
-
         private async Task InitializeSessionAsync()
         {
             _sessionEndTime = DateTime.UtcNow.AddMinutes(10);
@@ -243,7 +222,7 @@ namespace Brendha.Spike.Server.Services
 
             var job = JobMockService.GetCurrentJob();
 
-            var config = CreateSetupConfig(job, null);
+            var config = CreateSetupConfig(job, _currentResumeText!);
 
             var options = new JsonSerializerOptions
             {
