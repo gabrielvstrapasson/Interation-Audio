@@ -510,6 +510,11 @@ namespace Brendha.Spike.Server.Services
                         var question = questionElement.GetString();
                         await _interviewLogger.LogAsync("Brendha (IA)", question ?? "");
                         _logger.LogInformation($"Brendha (IA): {question}");
+
+                        if (!string.IsNullOrEmpty(question))
+                        {
+                            await _hubContext.Clients.All.SendAsync("ReceiveAIQuestion", question);
+                        }
                     }
                 }
 
