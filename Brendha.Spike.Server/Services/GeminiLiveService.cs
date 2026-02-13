@@ -260,7 +260,7 @@ namespace Brendha.Spike.Server.Services
                                 Name: TOOL_NAME_AI_QUESTION,
                                 Description: "Record your own question or statement to the candidate for logging purposes.",
                                 Parameters: new FunctionParameters(
-                                    Type: "Object",
+                                    Type: "OBJECT",
                                     Properties: new Dictionary<string, PropertyDetail>
                                     {
                                         {"minha_pergunta", new PropertyDetail("STRING", "The exact question or statement you just asked/said to the candidate") }
