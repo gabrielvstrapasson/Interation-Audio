@@ -2,7 +2,6 @@
 using Brendha.Spike.Server.Infrastructure;
 using Brendha.Spike.Server.Services;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.Logging.EventLog;
 
 namespace Brendha.Spike.Server.Hubs
 {
@@ -23,7 +22,7 @@ namespace Brendha.Spike.Server.Hubs
             }
             try
             {
-            await geminiService.ConnectAsync(enableAutoReconnect: true);
+            await geminiService.ConnectAsync();
             logger.LogInformation("Interview started successfully");
             }
             catch (Exception ex)
@@ -65,7 +64,7 @@ namespace Brendha.Spike.Server.Hubs
         }
         public async Task SendUserText(string text) 
         {
-            await geminiService.AppendUserHistory(text);
+            await geminiService.LogSystemMessage(text);
         }
 
         public async Task RequestSessionTimer()

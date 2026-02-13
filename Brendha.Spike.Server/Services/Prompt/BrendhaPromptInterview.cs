@@ -6,10 +6,9 @@ namespace Brendha.Spike.Server.Services.Prompt
 {
     public class BrendhaPromptInterview
     {
-        public static string Build(JobPosition job, string resumeText, string history = null)
+        public static string Build(JobPosition job, string resumeText)
         {
 
-            bool isNewSession = string.IsNullOrEmpty(history);
             bool hasResume = !string.IsNullOrWhiteSpace(resumeText);
 
             var systemInstructions = new
@@ -20,7 +19,6 @@ namespace Brendha.Spike.Server.Services.Prompt
                     goal = "Conduct a realistic technical interview. Extract detailed information from the candidate.",
                     tone = "Direct, professional, investigative. Like a real senior interviewer.",
                     output_language = "Brazilian Portuguese (pt-BR) ONLY.",
-                    session_stage = isNewSession ? "START" : "CONTINUE",
                 },
 
                 job_context = new
@@ -82,8 +80,7 @@ namespace Brendha.Spike.Server.Services.Prompt
                     workflow = "SEQUENCE: 1) Formulate question silently → 2) Call 'registrar_pergunta_ia' with question text → 3) Generate audio of that question → 4) Wait for user response → 5) Call 'registrar_fala_usuario' with user's speech → 6) Repeat"
                 },
 
-                execution_command = isNewSession
-                    ? (hasResume
+                execution_command = hasResume
                         ? "ACTION: START. " +
                            "1) Call 'registrar_pergunta_ia' with: 'Olá, [Nome]. Sou a Brendha, recrutadora tech. Tudo bem?' → speak it. " +
                            "2) After user responds, call 'registrar_pergunta_ia' with: 'Vamos conversar sobre a vaga de [Title]. Li seu currículo.' → speak it. " +
@@ -91,17 +88,11 @@ namespace Brendha.Spike.Server.Services.Prompt
                         : "ACTION: BLOCK. " +
                            "1) Call 'registrar_pergunta_ia' with: 'Olá! Sou a Brendha, recrutadora da vaga de [Title].' → speak it. " +
                            "2) Call 'registrar_pergunta_ia' with: 'Para iniciarmos, preciso que você envie seu currículo pelo botão de upload.' → speak it. " +
-                           "3) Wait.")
-                    : "ACTION: CONTINUE. Use 'registrar_pergunta_ia' before each question you ask. Check resume status silently, then ask next question."
+                           "3) Wait."
             };
 
 
             string promptString = JsonSerializer.Serialize(systemInstructions, new JsonSerializerOptions { WriteIndented = false });
-
-            if (!isNewSession)
-            {
-                promptString += $"\n\n[HISTORY_CONTEXT]:\n{history}\n";
-            }
 
             return promptString;
         }

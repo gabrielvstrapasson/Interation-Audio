@@ -17,8 +17,6 @@ namespace Brendha.Spike.Server.Services
         private const string GeminiUrl = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent";
         private const string TOOL_NAME = "registrar_fala_usuario";
         private const string TOOL_NAME_AI_QUESTION = "registrar_pergunta_ia";
-        private const int MAX_RECONNECT_ATTEMPTS = 3;
-        private const int RECONNECT_DELAY_MS = 5000;
 
         private readonly string _apiKey;
         private readonly ILogger<GeminiLiveService> _logger;
@@ -32,17 +30,12 @@ namespace Brendha.Spike.Server.Services
         private string _pendingResumeText;
         private string _currentResumeText;
 
-        private bool _allowAutoReconnect = false;
-        private int _reconnectAttempts = 0;
-        private DateTime _lastReconnectAttempt = DateTime.MinValue;
-
         private readonly Stopwatch _latencyWatch = new();
         private bool _isWaitingForFirstResponse = false;
         private bool _aiIsSpeaking = false;
         private bool _isDisposed = false;
 
         public event Func<byte[], Task>? OnAudioReceived;
-        public bool AllowAutoReconnect => _allowAutoReconnect;
 
         public bool IsConnected => _ws?.State == WebSocketState.Open;
         public bool HasResume => !string.IsNullOrWhiteSpace(_pendingResumeText) || !string.IsNullOrWhiteSpace(_currentResumeText);
@@ -57,40 +50,15 @@ namespace Brendha.Spike.Server.Services
             _hubContext = hubContext;
             _interviewLogger = interviewLogger;
         }
-        public async Task ConnectAsync(bool enableAutoReconnect = false)
+        public async Task ConnectAsync()
         {
             if (string.IsNullOrEmpty(_apiKey)) throw new Exception("API Key is missing");
             if (_isDisposed) throw new ObjectDisposedException(nameof(GeminiLiveService));
 
-            if (enableAutoReconnect && _reconnectAttempts >= MAX_RECONNECT_ATTEMPTS)
-            {
-                _logger.LogError($"Max reconnection attempts {MAX_RECONNECT_ATTEMPTS} reached. Stopping reconnection");
-                _allowAutoReconnect = false;
-                await _hubContext.Clients.All.SendAsync("ReconectionFailed", "Maximum reconnection attempts exceeded");
-                return;
-            }
-
-            if (enableAutoReconnect && _reconnectAttempts > 0)
-            {
-                var timeSinceLastAttempt = (DateTime.UtcNow - _lastReconnectAttempt).TotalMilliseconds;
-                var delayRequired = RECONNECT_DELAY_MS * Math.Pow(2, _reconnectAttempts - 1);
-
-                if (timeSinceLastAttempt < delayRequired)
-                {
-                    var waitTime = (int)(delayRequired - timeSinceLastAttempt);
-                    _logger.LogInformation($"Waiting {waitTime}ms before retry attempt {_reconnectAttempts + 1}");
-                    await Task.Delay(waitTime);
-                }
-            }
 
             if (_ws?.State == WebSocketState.Open)
             {
                 _logger.LogInformation("WebSocket already connected");
-
-                if (!enableAutoReconnect)
-                {
-                    await _hubContext.Clients.All.SendAsync("SessionStarted", GetTimeRemaining());
-                }
                 return;
             }
 
@@ -100,20 +68,12 @@ namespace Brendha.Spike.Server.Services
                 if (_ws?.State == WebSocketState.Open)
                 {
                     _logger.LogInformation("WebSocket already connected");
-
-                    if (!enableAutoReconnect)
-                    {
-                        await _hubContext.Clients.All.SendAsync("SessionStarted", GetTimeRemaining());
-                    }
                     return;
                 }
 
                 DisposeWebSocketInternal();
                 _ws = new ClientWebSocket();
-                _allowAutoReconnect = enableAutoReconnect;
-                _lastReconnectAttempt = DateTime.UtcNow;
 
-                _logger.LogInformation($"Trying connect in Gemini (Attempt {_reconnectAttempts + 1}/{MAX_RECONNECT_ATTEMPTS})");
                 await _ws.ConnectAsync(new Uri($"{GeminiUrl}?key={_apiKey}"), CancellationToken.None);
 
                 _logger.LogInformation("WebSocket connected, initializing session...");
@@ -122,8 +82,6 @@ namespace Brendha.Spike.Server.Services
             {
                 _logger.LogError($"Fail for connect in API: {ex.Message}");
                 DisposeWebSocketInternal();
-
-                if (enableAutoReconnect) _reconnectAttempts++;
                 throw;
             }
             finally
@@ -139,23 +97,13 @@ namespace Brendha.Spike.Server.Services
                     _logger.LogInformation("Resume loaded into interview context");
                 }
 
-                await InitializeSessionAsync(enableAutoReconnect);
+                await InitializeSessionAsync();
                 _ = Task.Run(ReceiveLoopAsync);
 
-                if (enableAutoReconnect)
-                {
-                    _logger.LogInformation($"Gemini successfull after {_reconnectAttempts + 1} attempts");
-                    _reconnectAttempts = 0;
-                }
-                else
-                {
-                    _logger.LogInformation("Gemini connection established successfully");
-                }
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Failed to initialize session: {ex.Message}");
-                if (enableAutoReconnect) _reconnectAttempts++;
                 await DisconnectAsync();
                 throw;
             }
@@ -175,7 +123,7 @@ namespace Brendha.Spike.Server.Services
                 if (doc.RootElement.TryGetProperty("resumeText", out var el) ||
                     doc.RootElement.TryGetProperty("resume_text", out el))
                 {
-                    _pendingResumeText = el.GetString();
+                    _pendingResumeText = el.GetString()!;
                     _logger.LogInformation("Resume set successfully. Ready to start interview");
 
                     await _hubContext.Clients.All.SendAsync("ResumeReceived", new { success = true });
@@ -194,7 +142,7 @@ namespace Brendha.Spike.Server.Services
 
 
         }
-        public async Task AppendUserHistory(string text) => await _interviewLogger.LogAsync("System:", text);
+        public async Task LogSystemMessage(string text) => await _interviewLogger.LogAsync("System:", text);
         public async Task SendAudioChunkAsync(byte[] audioData)
         {
             if (_ws?.State != WebSocketState.Open) return;
@@ -224,8 +172,6 @@ namespace Brendha.Spike.Server.Services
             try
             {
                 _logger.LogInformation("Closing Gemini Connection");
-                _allowAutoReconnect = false;
-                _reconnectAttempts = 0;
 
                 await _wsSemaphore.WaitAsync();
                 try
@@ -254,15 +200,14 @@ namespace Brendha.Spike.Server.Services
                 _logger.LogError($"Error closing Gemini connection: {ex.Message}");
             }
         }
-        private async Task InitializeSessionAsync(bool isReconnection = false)
+        private async Task InitializeSessionAsync()
         {
-            _sessionEndTime = DateTime.UtcNow.AddMinutes(1);
+            _sessionEndTime = DateTime.UtcNow.AddMinutes(10);
             await _hubContext.Clients.All.SendAsync("SessionStarted", GetTimeRemaining());
 
             var job = JobMockService.GetCurrentJob();
 
-            var history = isReconnection ? null : _interviewLogger.GetHistory();
-            var config = CreateSetupConfig(job, _currentResumeText, isReconnection);
+            var config = CreateSetupConfig(job, _currentResumeText);
 
             var options = new JsonSerializerOptions
             {
@@ -272,72 +217,7 @@ namespace Brendha.Spike.Server.Services
             var configJson = JsonSerializer.Serialize(config, options);
             await SendJsonInternalAsync(configJson);
 
-            if (isReconnection)
-            {
-                await _interviewLogger.LogAsync("System", "Session reconnected -> context restored");
-            }
-            else if (!string.IsNullOrWhiteSpace(_currentResumeText))
-            {
-                await _interviewLogger.LogAsync("System", "Interview started with resume preloaded");
-            }
-            else
-            {
-                await _interviewLogger.LogAsync("System", "Interview started without resume");
-            }
             _logger.LogInformation("Start Session");
-        }
-        private async Task InjectHistorySummaryAsync()
-        {
-            try
-            {
-                var fullHistory = _interviewLogger.GetHistory();
-
-                if (string.IsNullOrWhiteSpace(fullHistory))
-                {
-                    _logger.LogInformation("No history to inject");
-                    return;
-                }
-
-                var historyLines = fullHistory.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                var recentHistory = string.Join('\n', historyLines.TakeLast(20)); // ~10 perguntas/respostas
-
-                var contextMessage = $"[CONTEXT RESTORATION - Session reconnected]\n\n" +
-                    $"Recent conversation history:\n{recentHistory}\n\n" +
-                    $"INSTRUCTION: You were in the middle of an interview. Continue naturally from where you left off. " +
-                    $"Acknowledge the reconnection briefly ('Desculpe a interrupção técnica') and resume the interview.";
-
-                var payload = new
-                {
-                    client_content = new
-                    {
-                        turns = new[]
-                        {
-                            new
-                            {
-                                role = "user",
-                                parts = new[]
-                                {
-                                    new { text = contextMessage }
-                                }
-                            }
-                        },
-                        turn_complete = true
-                    }
-                };
-
-                var options = new JsonSerializerOptions
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-                    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-                };
-
-                await SendJsonAsync(JsonSerializer.Serialize(payload, options));
-                _logger.LogInformation("History summary injected successfully");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"Error injecting history summary: {ex.Message}");
-            }
         }
 
         private async Task SendJsonInternalAsync(string json)
@@ -346,11 +226,11 @@ namespace Brendha.Spike.Server.Services
             var bytes = Encoding.UTF8.GetBytes(json);
             await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
         }
-        private GeminiSetupRequest CreateSetupConfig(JobPosition job, string resumeText, bool isReconnection = false)
+        private GeminiSetupRequest CreateSetupConfig(JobPosition job, string resumeText)
         {
 
-            var history = isReconnection ? null : _interviewLogger.GetHistory();
-            var systemInstructionText = BrendhaPromptInterview.Build(job, resumeText, history);
+
+            var systemInstructionText = BrendhaPromptInterview.Build(job, resumeText);
 
             return new GeminiSetupRequest(new GeminiSetup(
                 Model: "models/gemini-2.5-flash-native-audio-latest",
@@ -518,7 +398,7 @@ namespace Brendha.Spike.Server.Services
                     }
                 }
 
-                    responses.Add(new FunctionResponse(new { result = "ok" }, id!));
+                responses.Add(new FunctionResponse(new { result = "ok" }, id!));
             }
             var payload = new ToolCallResponse(new ToolResponsePayload(responses));
             var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
@@ -542,7 +422,7 @@ namespace Brendha.Spike.Server.Services
             {
                 try { _ws.Dispose(); }
                 catch { }
-                finally { _ws = null; }
+                finally { _ws = null!; }
             }
         }
     }
