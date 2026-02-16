@@ -91,6 +91,10 @@ namespace Brendha.Spike.Server.Hubs
                 await Clients.Caller.SendAsync("ResumeUploadFailed", "Failed to upload resume:", ex.Message);
             }
         }
+        public async Task SubmitResume(string resumeJson)
+        {
+            await geminiService.SetResumeAsync(resumeJson);
+        }
         public async Task EndInterview()
         {
             try
