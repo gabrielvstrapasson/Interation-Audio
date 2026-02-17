@@ -1,10 +1,24 @@
 ﻿using Brendha.Spike.Core.Models;
+using System.Runtime.CompilerServices;
 
 namespace Brendha.Spike.Server.Services.Data
 {
     public class JobMockService
     {
-        public static JobPosition GetCurrentJob()
+        private static JobPosition _currentJob = GetDefaultJob();
+        public static JobPosition GetCurrentJob() => _currentJob;
+        public static void UpdateJob(JobPosition job)
+        {
+            _currentJob = job ?? GetDefaultJob();
+        }
+
+        public static void ResetToDefault()
+        {
+            _currentJob = GetDefaultJob();
+        }
+
+
+        private static JobPosition GetDefaultJob()
         {
             return new JobPosition
             {

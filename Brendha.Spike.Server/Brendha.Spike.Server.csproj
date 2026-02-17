@@ -15,4 +15,8 @@
 	  <ProjectReference Include="..\Brendha.Spike.Core\Brendha.Spike.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="logs_interview\" />
+  </ItemGroup>
+
 </Project>

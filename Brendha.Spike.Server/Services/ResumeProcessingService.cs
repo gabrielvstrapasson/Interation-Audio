@@ -26,6 +26,15 @@ namespace Brendha.Spike.Server.Services
 
             return rawText;
         }
+        public Task<string> ProcessResumeText(string resumeText)
+        {
+            if (string.IsNullOrWhiteSpace(resumeText))
+            {
+                _logger.LogWarning("Resume text is empty");
+            }
+            return Task.FromResult(resumeText);
+        }
+
         private async Task<string> ExtractTextFromPdf(Stream stream, string fileName)
         {
             try
@@ -64,5 +73,7 @@ namespace Brendha.Spike.Server.Services
                 return null;
             }
         }
+
+
     }
 }

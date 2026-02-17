@@ -1,4 +1,5 @@
 ﻿using Brendha.Spike.Server.Infrastructure.Interfaces;
+using Microsoft.AspNetCore.Components.Web;
 using System.Runtime.CompilerServices;
 using System.Text;
 using static System.Net.Mime.MediaTypeNames;
@@ -26,12 +27,21 @@ namespace Brendha.Spike.Server.Infrastructure
 
         public async Task LogAsync(string role, string message)
         {
-            if (string.IsNullOrWhiteSpace(message) ||
-                    message.StartsWith("**") ||
+
+            if (string.IsNullOrWhiteSpace(message)) { return; }
+
+            bool isAI = role.Contains("Brendha", StringComparison.OrdinalIgnoreCase) ||
+                role.Contains("IA", StringComparison.OrdinalIgnoreCase);
+
+
+            if (!isAI)
+            {
+                if (message.StartsWith("**") ||
                     message.StartsWith("I've") ||
                     message.StartsWith("Thinking"))
-            {
-                return;
+                {
+                    return;
+                }
             }
 
             lock (_memoryHistory)

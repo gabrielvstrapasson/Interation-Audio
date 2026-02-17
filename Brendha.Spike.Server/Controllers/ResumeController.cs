@@ -17,8 +17,18 @@ namespace Brendha.Spike.Server.Controllers
             var rawText = await service.ProcessPdfAsync(stream, file.FileName);
 
             if (string.IsNullOrEmpty(rawText)) return BadRequest("Error processing the file.");
-            
-            return Ok(new {resumeText = rawText});
+
+            return Ok(new { resumeText = rawText });
         }
+
+        [HttpPost("text")]
+        public async Task<IActionResult> SubmitText([FromBody] ResumeTextRequest request)
+        {
+            var processedText = await service.ProcessResumeText(request.ResumeText);
+            return Ok(new {resumeText = processedText });
+        }
+
+        public record ResumeTextRequest(string ResumeText);
     }
+
 }

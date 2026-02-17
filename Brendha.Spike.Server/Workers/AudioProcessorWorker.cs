@@ -39,31 +39,7 @@ namespace Brendha.Spike.Server.Workers
                 }
             }, stoppingToken);
 
-            var reconnectTask = Task.Run(async () =>
-            {
-                while (!stoppingToken.IsCancellationRequested)
-                {
-                    try
-                    {
-
-                        if (!geminiLiveService.IsConnected && geminiLiveService.AllowAutoReconnect)
-                        {
-                            logger.LogWarning("Gemini disconnected (10min timeout), reconnecting...");
-                            await geminiLiveService.ConnectAsync(enableAutoReconnect: true);
-                            logger.LogInformation("Reconnected to Gemini successfully");
-                        }
-
-                        await Task.Delay(3000, stoppingToken);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Error in reconnection loop");
-                        await Task.Delay(5000, stoppingToken);
-                    }
-                }
-            }, stoppingToken);
-
-            await Task.WhenAll(audioTask, reconnectTask);
+            await Task.WhenAll(audioTask);
         }
     }
 }
