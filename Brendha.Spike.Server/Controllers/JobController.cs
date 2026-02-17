@@ -25,12 +25,18 @@ namespace Brendha.Spike.Server.Controllers
             if (string.IsNullOrWhiteSpace(job.Level)) return BadRequest("Job level is required.");
             try
             {
+
+                Console.WriteLine($"Atualizando vaga: {job.Title}");
+                Console.WriteLine($"Benefícios recebidos: {string.Join(", ", job.Benefits ?? new string[0])}");
+                Console.WriteLine($"Mandatory Skills recebidas: {string.Join(", ", job.MandatorySkills?? new string[0])}");
+
                 JobMockService.UpdateJob(job);
                 return Ok(new
                 {
-                    message = "Job position updated successfully",
-                    job = JobMockService.GetCurrentJob()
+                    message = $"Job position updated successfully \n{job}",
+                    job = JobMockService.GetCurrentJob(),
                 });
+
             }
             catch (Exception ex)
             {
@@ -45,7 +51,6 @@ namespace Brendha.Spike.Server.Controllers
             try
             {
                 JobMockService.ResetToDefault();
-                logger.LogInformation("Job reset to default");
 
                 return Ok(new
                 {
