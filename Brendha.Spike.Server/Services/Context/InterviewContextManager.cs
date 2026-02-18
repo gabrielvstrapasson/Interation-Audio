@@ -9,9 +9,9 @@ namespace Brendha.Spike.Server.Services.Context
         private const int CHECKPOINT_INTERVAL_SECONDS = 120;
         private const int MESSAGE_TRUNCATE_LENGTH = 150;
         private const int CHECKPOINT_VALIDITY_MINUTES = 10;
+        private const int MAX_CONTEXT_LENGTH = 4000;
 
         private readonly Queue<(string role, string message)> _recentMessages = new();
-        private readonly ILogger<InterviewContextManager> _logger;
         private readonly SemaphoreSlim _contextLock = new(1, 1);
 
         private string _lastCheckpointSummary = string.Empty;
@@ -129,6 +129,12 @@ namespace Brendha.Spike.Server.Services.Context
 
                 var result = context.ToString();
 
+                if (result.Length > MAX_CONTEXT_LENGTH)
+                {
+                    logger.LogWarning($"Context too large {result.Length}, truncating to {MAX_CONTEXT_LENGTH}");
+                    result = result.Substring(0, MAX_CONTEXT_LENGTH) + "\n... (truncated)";
+                }
+
                 if (!string.IsNullOrWhiteSpace(result))
                 {
                     logger.LogInformation($"Reconnection context built: {result.Length} chars, {_recentMessages.Count} recent messages");
@@ -153,9 +159,6 @@ namespace Brendha.Spike.Server.Services.Context
                 _contextLock.Release();
             }
         }
-
-
-
 
         public void Dispose()
         {
