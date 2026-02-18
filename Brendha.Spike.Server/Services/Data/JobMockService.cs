@@ -1,38 +1,54 @@
 ﻿using Brendha.Spike.Core.Models;
+using System.Runtime.CompilerServices;
 
 namespace Brendha.Spike.Server.Services.Data
 {
     public class JobMockService
     {
-        public static JobPosition GetCurrentJob()
+        private static JobPosition _currentJob = GetDefaultJob();
+        public static JobPosition GetCurrentJob() => _currentJob;
+        public static void UpdateJob(JobPosition job)
+        {
+            _currentJob = job ?? GetDefaultJob();
+        }
+
+        public static void ResetToDefault()
+        {
+            _currentJob = GetDefaultJob();
+        }
+
+
+        private static JobPosition GetDefaultJob()
         {
             return new JobPosition
             {
-                Title = "Desenvolvedor .NET Backend",
-                Level = "Sênior",
-                Description = "Você atuará na modernização de um legado monolítico para microsserviços. O sistema é crítico, financeiro e exige alta resiliência.",
-                SalaryRange = "R$ 18.000 - R$ 22.000 (PJ)",
+                Title = "Desenvolvedor .NET Backend Júnior",
+                Level = "Júnior",
+                Description = "Você atuará no desenvolvimento e manutenção de APIs REST, corrigindo bugs e implementando novas features com supervisão. Ótima oportunidade para aprender sobre microsserviços e sistemas financeiros.",
+                SalaryRange = "R$ 4.000 - R$ 6.000 (PJ)",
                 MandatorySkills = new[]
-                   {
+                {
                     ".NET 8",
-                    "C# Avançado",
-                    "Azure Service Bus",
-                    "Clean Architecture",
+                    "C# (Fundamentos e OO)",
+                    "REST APIs",
                     "SQL Server",
-                    "Entity Framework Core"
+                    "Entity Framework Core",
+                    "Git"
                 },
                 NiceToHaveSkills = new[]
-                   {
-                    "Kubernetes (AKS)",
-                    "OpenTelemetry",
-                    "Redis"
+                {
+                    "Docker",
+                    "Noções de Azure",
+                    "Testes Unitários (xUnit)",
+                    "Conhecimento em SOLID"
                 },
                 Benefits = new[]
                 {
                     "Home Office",
                     "Horário Flexível",
                     "Plano de Saúde",
-                    "Vale Refeição"
+                    "Vale Refeição",
+                    "Mentoria Técnica"
                 }
             };
         }
