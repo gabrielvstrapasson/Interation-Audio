@@ -2,6 +2,7 @@
 using Brendha.Spike.Core.Models.Gemini;
 using Brendha.Spike.Server.Hubs;
 using Brendha.Spike.Server.Infrastructure.Interfaces;
+using Brendha.Spike.Server.Services.Context;
 using Brendha.Spike.Server.Services.Data;
 using Brendha.Spike.Server.Services.Prompt;
 using Microsoft.AspNetCore.SignalR;
@@ -9,6 +10,7 @@ using System.Diagnostics;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace Brendha.Spike.Server.Services
 {
@@ -22,6 +24,7 @@ namespace Brendha.Spike.Server.Services
         private readonly ILogger<GeminiLiveService> _logger;
         public readonly IHubContext<InterviewHub> _hubContext;
         private readonly IInterviewLogger _interviewLogger;
+        private readonly InterviewContextManager _contextManager;
 
         private ClientWebSocket _ws;
         private readonly SemaphoreSlim _wsSemaphore = new(1, 1);
@@ -43,12 +46,14 @@ namespace Brendha.Spike.Server.Services
         public GeminiLiveService(string apiKey,
             ILogger<GeminiLiveService> logger,
             IHubContext<InterviewHub> hubContext,
-            IInterviewLogger interviewLogger)
+            IInterviewLogger interviewLogger,
+            InterviewContextManager contextManager)
         {
             _apiKey = apiKey;
             _logger = logger;
             _hubContext = hubContext;
             _interviewLogger = interviewLogger;
+            _contextManager = contextManager;
         }
         public async Task ConnectAsync()
         {
@@ -98,6 +103,8 @@ namespace Brendha.Spike.Server.Services
                 }
 
                 await InitializeSessionAsync();
+                _contextManager.StartCheckpointTimer();
+
                 _ = Task.Run(ReceiveLoopAsync);
 
             }
@@ -172,6 +179,7 @@ namespace Brendha.Spike.Server.Services
             try
             {
                 _logger.LogInformation("Closing Gemini Connection");
+                _contextManager.StopCheckpointTimer();
 
                 await _wsSemaphore.WaitAsync();
                 try
@@ -207,7 +215,10 @@ namespace Brendha.Spike.Server.Services
 
             var job = JobMockService.GetCurrentJob();
 
-            var config = CreateSetupConfig(job, _currentResumeText);
+            var reconnectionContext = await _contextManager.BuildReconnectionContextAsync();
+            var hasContext = !string.IsNullOrWhiteSpace(reconnectionContext);
+
+            var config = CreateSetupConfig(job, _currentResumeText, reconnectionContext);
 
             var options = new JsonSerializerOptions
             {
@@ -217,7 +228,9 @@ namespace Brendha.Spike.Server.Services
             var configJson = JsonSerializer.Serialize(config, options);
             await SendJsonInternalAsync(configJson);
 
-            _logger.LogInformation("Start Session");
+            _logger.LogInformation(hasContext 
+                ? "Session initialized with reconnection context"
+                : "New sesion started");
         }
 
         private async Task SendJsonInternalAsync(string json)
@@ -226,11 +239,15 @@ namespace Brendha.Spike.Server.Services
             var bytes = Encoding.UTF8.GetBytes(json);
             await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
         }
-        private GeminiSetupRequest CreateSetupConfig(JobPosition job, string resumeText)
+        private GeminiSetupRequest CreateSetupConfig(JobPosition job, string resumeText, string reconnectionContext = "")
         {
-
-
             var systemInstructionText = BrendhaPromptInterview.Build(job, resumeText);
+
+            if (!string.IsNullOrWhiteSpace(reconnectionContext))
+            {
+                systemInstructionText += "\n Reconnection context for this session " +
+                    reconnectionContext + "\n Use this information to maintain continuity in the interview. Do not repeat questions asked previously.";
+            }
 
             return new GeminiSetupRequest(new GeminiSetup(
                 Model: "models/gemini-2.5-flash-native-audio-latest",
@@ -380,6 +397,8 @@ namespace Brendha.Spike.Server.Services
                         var text = txtElement.GetString();
                         await _interviewLogger.LogAsync("Candidato:", text ?? "");
                         _logger.LogInformation($"Candidato: {text}");
+
+                        await _contextManager.AddMessageAsync("Candidato", text);
                     }
                 }
                 else if (name == TOOL_NAME_AI_QUESTION)
@@ -390,6 +409,7 @@ namespace Brendha.Spike.Server.Services
                         var question = questionElement.GetString();
                         await _interviewLogger.LogAsync("Brendha (IA)", question ?? "");
                         _logger.LogInformation($"Brendha (IA): {question}");
+                        await _contextManager.AddMessageAsync("Brendha (IA)", question);
 
                         if (!string.IsNullOrEmpty(question))
                         {

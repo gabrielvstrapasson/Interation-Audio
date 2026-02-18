@@ -2,6 +2,7 @@ using Brendha.Spike.Server.Hubs;
 using Brendha.Spike.Server.Infrastructure;
 using Brendha.Spike.Server.Infrastructure.Interfaces;
 using Brendha.Spike.Server.Services;
+using Brendha.Spike.Server.Services.Context;
 using Brendha.Spike.Server.Workers;
 using DotNetEnv;
 using Microsoft.AspNetCore.SignalR;
@@ -24,7 +25,8 @@ builder.Services.AddSingleton<GeminiLiveService>(sp =>
         apiKey,
         sp.GetRequiredService<ILogger<GeminiLiveService>>(),
         sp.GetRequiredService<IHubContext<InterviewHub>>(),
-        sp.GetRequiredService<IInterviewLogger>()
+        sp.GetRequiredService<IInterviewLogger>(),
+        sp.GetRequiredService<InterviewContextManager>()
     );
 });
 
