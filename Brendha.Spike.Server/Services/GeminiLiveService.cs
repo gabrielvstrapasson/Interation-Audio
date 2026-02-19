@@ -240,7 +240,14 @@ namespace Brendha.Spike.Server.Services
             var reconnectionContext = await _contextManager.BuildReconnectionContextAsync();
             var hasContext = !string.IsNullOrWhiteSpace(reconnectionContext);
 
-            var config = CreateSetupConfig(job, _currentResumeText);
+            if (hasContext)
+            {
+                _logger.LogInformation($"Reconnection with context {reconnectionContext.Length}  chars");
+                await _interviewLogger.LogAsync("System", $"Reconnection with context recovery from history");
+            }
+            else { _logger.LogInformation("Starting fresh interview"); }
+
+            var config = CreateSetupConfig(job, _currentResumeText, reconnectionContext);
 
             var options = new JsonSerializerOptions
             {
@@ -259,10 +266,18 @@ namespace Brendha.Spike.Server.Services
             var bytes = Encoding.UTF8.GetBytes(json);
             await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
         }
-        private GeminiSetupRequest CreateSetupConfig(JobPosition job, string resumeText)
+        private GeminiSetupRequest CreateSetupConfig(JobPosition job, string resumeText, string? reconnectionContext = null)
         {
             var systemInstructionText = BrendhaPromptInterview.Build(job, resumeText);
 
+            if (!string.IsNullOrWhiteSpace(reconnectionContext))
+            {
+                systemInstructionText += "\n " +
+                    "History recovery\n" +
+                    "Important: continue the interview based on the following history of the conversation. Use it to adapt your next questions and answers, but do not repeat the same information again:\n" +
+                    "Do not introduce your self again. " +
+                    $"Context recovery: {reconnectionContext}";
+            }
 
             return new GeminiSetupRequest(new GeminiSetup(
                 Model: "models/gemini-2.5-flash-native-audio-latest",
