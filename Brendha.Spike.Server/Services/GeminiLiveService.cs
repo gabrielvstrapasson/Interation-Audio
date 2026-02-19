@@ -2,16 +2,15 @@
 using Brendha.Spike.Core.Models.Gemini;
 using Brendha.Spike.Server.Hubs;
 using Brendha.Spike.Server.Infrastructure.Interfaces;
-using Brendha.Spike.Server.Services.Connection;
 using Brendha.Spike.Server.Services.Context;
 using Brendha.Spike.Server.Services.Data;
+using Brendha.Spike.Server.Services.Interfaces;
 using Brendha.Spike.Server.Services.Prompt;
 using Microsoft.AspNetCore.SignalR;
 using System.Diagnostics;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace Brendha.Spike.Server.Services
 {
@@ -26,9 +25,7 @@ namespace Brendha.Spike.Server.Services
         public readonly IHubContext<InterviewHub> _hubContext;
         private readonly IInterviewLogger _interviewLogger;
         private readonly InterviewContextManager _contextManager;
-        private readonly ReconnectionManager _reconnectionManager;
-        private readonly SessionRenewalManager _sessionRenewalManager;
-        private int _reconnectionAttemptCount = 0;
+        private readonly IGeminiReconnectionManager _reconnectionManager;
 
         private ClientWebSocket _ws;
         private readonly SemaphoreSlim _wsSemaphore = new(1, 1);
@@ -55,8 +52,7 @@ namespace Brendha.Spike.Server.Services
             IHubContext<InterviewHub> hubContext,
             IInterviewLogger interviewLogger,
             InterviewContextManager contextManager,
-            ReconnectionManager reconnectionManager,
-            SessionRenewalManager sessionRenewalManager)
+            IGeminiReconnectionManager reconnectionManager)
         {
             _apiKey = apiKey;
             _logger = logger;
@@ -64,7 +60,6 @@ namespace Brendha.Spike.Server.Services
             _interviewLogger = interviewLogger;
             _contextManager = contextManager;
             _reconnectionManager = reconnectionManager;
-            _sessionRenewalManager = sessionRenewalManager;
         }
         public async Task ConnectAsync()
         {
@@ -114,10 +109,6 @@ namespace Brendha.Spike.Server.Services
                 }
 
                 await InitializeSessionAsync();
-                _contextManager.StartCheckpointTimer();
-
-
-                _reconnectionManager.ResetState();
 
                 lock (_receiveLoopLock)
                 {
@@ -202,9 +193,6 @@ namespace Brendha.Spike.Server.Services
         {
             if (_isDisposed) return;
             _isDisposed = true;
-
-            _sessionRenewalManager?.Dispose();
-            _reconnectionManager?.Dispose();
             _contextManager?.Dispose();
             DisposeWebSocketInternal();
             _wsSemaphore?.Dispose();
@@ -214,10 +202,6 @@ namespace Brendha.Spike.Server.Services
             try
             {
                 _logger.LogInformation("Closing Gemini Connection");
-
-                _sessionRenewalManager.StopRenewalTimer();
-                _reconnectionManager.CancelReconnection();
-                _contextManager.StopCheckpointTimer();
 
                 await _wsSemaphore.WaitAsync();
                 try
@@ -256,7 +240,7 @@ namespace Brendha.Spike.Server.Services
             var reconnectionContext = await _contextManager.BuildReconnectionContextAsync();
             var hasContext = !string.IsNullOrWhiteSpace(reconnectionContext);
 
-            var config = CreateSetupConfig(job, _currentResumeText, reconnectionContext);
+            var config = CreateSetupConfig(job, _currentResumeText);
 
             var options = new JsonSerializerOptions
             {
@@ -266,19 +250,7 @@ namespace Brendha.Spike.Server.Services
             var configJson = JsonSerializer.Serialize(config, options);
             await SendJsonInternalAsync(configJson);
 
-            _logger.LogInformation(hasContext
-                ? $"Session initialized with reconnection context (Renewal #{_sessionRenewalManager.RenewalCount})"
-                : "New sesion started");
-
-            if (!_sessionRenewalManager.IsRenewing)
-            {
-                _sessionRenewalManager.StartRenewalTimer(RenewSessionAsync);
-            }
-
-            else
-            {
-                _logger.LogDebug("Skipping renewal timer - renewal in progress");
-            }
+            _logger.LogInformation("New sesion started");
         }
 
         private async Task SendJsonInternalAsync(string json)
@@ -287,15 +259,10 @@ namespace Brendha.Spike.Server.Services
             var bytes = Encoding.UTF8.GetBytes(json);
             await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
         }
-        private GeminiSetupRequest CreateSetupConfig(JobPosition job, string resumeText, string reconnectionContext = "")
+        private GeminiSetupRequest CreateSetupConfig(JobPosition job, string resumeText)
         {
             var systemInstructionText = BrendhaPromptInterview.Build(job, resumeText);
 
-            if (!string.IsNullOrWhiteSpace(reconnectionContext))
-            {
-                systemInstructionText += "\n Reconnection context for this session " +
-                    reconnectionContext + "\n Use this information to maintain continuity in the interview. Do not repeat questions asked previously.";
-            }
 
             return new GeminiSetupRequest(new GeminiSetup(
                 Model: "models/gemini-2.5-flash-native-audio-latest",
@@ -386,57 +353,54 @@ namespace Brendha.Spike.Server.Services
                     {
                         _logger.LogWarning($"Google closed connection. Status: {result.CloseStatus}, Desc: {result.CloseStatusDescription}");
 
-                        // ✅ Detecta erros não recuperáveis
-                        if (IsNonRecoverableError(result.CloseStatus))
+                        if (result.CloseStatus == WebSocketCloseStatus.NormalClosure)
                         {
-                            _logger.LogError(
-                                "Non-recoverable error detected: {Status}. Will NOT attempt reconnection.",
-                                result.CloseStatus);
+                            _logger.LogInformation("Connection closed normally by user or server");
+                            break;
+                        }
+                        
+
+                        if (!_reconnectionManager.ShouldAttemptReconnection(result.CloseStatus))
+                        {
+                            _logger.LogError("Non-recoverable error: {Status}. Will NOT reconnect.", result.CloseStatus);
 
                             await _hubContext.Clients.All.SendAsync("FatalError", new
                             {
                                 status = result.CloseStatus?.ToString(),
                                 description = result.CloseStatusDescription,
-                                message = "Configuration or content rejected by API. Please review and restart."
+                                message = "Non-recoverable error, please restart"
                             });
 
                             await _interviewLogger.LogAsync("System",
-                                $"Fatal error: {result.CloseStatus} - {result.CloseStatusDescription}");
+                                $"Erro fatal: {result.CloseStatus} - {result.CloseStatusDescription}");
 
-                            // Não tenta reconectar
                             break;
                         }
 
-                        await _wsSemaphore.WaitAsync();
-                        try
+                        _logger.LogInformation("Attempting automatic reconnection...");
+
+                        bool reconnected = await _reconnectionManager.TryReconnectAsync(async () =>
                         {
-                            if (_ws?.State == WebSocketState.Open || _ws?.State == WebSocketState.CloseReceived)
-                            {
-                                await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
-                            }
+                            await ConnectAsync();
+                        });
+
+                        if (reconnected)
+                        {
+                            continue;
                         }
-                        finally
+                        else
                         {
-                            _wsSemaphore.Release();
+                            break;
                         }
 
-                        await HandleDisconnectionAsync();
-                        break;
                     }
 
                     var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
                     await ProcessIncomingMessageAsync(json);
                 }
-                catch (WebSocketException wsEx)
-                {
-                    _logger.LogError($"WebSocket error in receive loop: {wsEx.Message}");
-                    await HandleDisconnectionAsync();
-                    break;
-                }
                 catch (Exception ex)
                 {
                     _logger.LogError($"Error in receive loop: {ex.Message}");
-                    await HandleDisconnectionAsync();
                     break;
                 }
             }
@@ -452,138 +416,6 @@ namespace Brendha.Spike.Server.Services
             }
 
             _logger.LogInformation("Receive loop ended");
-        }
-
-        // ✅ NOVO MÉTODO - Identifica erros não recuperáveis
-        private bool IsNonRecoverableError(WebSocketCloseStatus? status)
-        {
-            if (!status.HasValue) return false;
-
-            return status.Value switch
-            {
-                WebSocketCloseStatus.PolicyViolation => true, // Violação de política
-                WebSocketCloseStatus.InvalidPayloadData => true, // Dados inválidos
-                WebSocketCloseStatus.InvalidMessageType => true, // Tipo de mensagem inválido
-                WebSocketCloseStatus.MandatoryExtension => true, // Extensão obrigatória ausente
-                WebSocketCloseStatus.ProtocolError => true, // Erro de protocolo
-                _ => false
-            };
-        }
-        private async Task RenewSessionAsync()
-        {
-            if (_isRenewingSession || _isDisposed) return;
-
-            _isRenewingSession = true;
-
-            try
-            {
-                _logger.LogInformation("Starting proactive session renewal...");
-
-                _contextManager.CreateCheckpoint();
-
-                await _hubContext.Clients.All.SendAsync("SessionRenewing", new
-                {
-                    renewalNumber = _sessionRenewalManager.RenewalCount,
-                    message = "Renewing session to continue interview..."
-                });
-
-                await _interviewLogger.LogAsync("System",
-                    $"Session renewal #{_sessionRenewalManager.RenewalCount} - Maintaining conversation context");
-
-
-                _sessionRenewalManager.StopRenewalTimer();
-                await _wsSemaphore.WaitAsync();
-                try
-                {
-                    if (_ws?.State == WebSocketState.Open)
-                    {
-                        await _ws.CloseAsync(
-                            WebSocketCloseStatus.NormalClosure,
-                            "Session renewal",
-                            CancellationToken.None);
-                    }
-                    DisposeWebSocketInternal();
-                }
-                finally
-                {
-                    _wsSemaphore.Release();
-                }
-
-
-                await Task.Delay(3000);
-
-                await ConnectAsync();
-
-                await Task.Delay(2000);
-                await _hubContext.Clients.All.SendAsync("SessionRenewed", new
-                {
-                    renewalNumber = _sessionRenewalManager.RenewalCount,
-                    message = "Session renewed successfully. Continuing interview..."
-                });
-
-                _logger.LogInformation("Session renewed successfully!");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to renew session proactively");
-
-                await HandleDisconnectionAsync();
-            }
-            finally
-            {
-                _isRenewingSession = false;
-            }
-        }
-
-        private bool ShouldAttemptReconnection()
-        {
-
-            if (_isRenewingSession)
-            {
-                _logger.LogDebug("Skipping reconnection - session renewal in progress");
-                return false;
-            }
-
-            if (_isDisposed)
-            {
-                return false;
-            }
-
-            return true;
-        }
-        private async Task HandleDisconnectionAsync()
-        {
-            if (_isDisposed || _isRenewingSession) return;
-
-            _logger.LogWarning("Connection lost. Attempting to reconnect with context...");
-
-            _reconnectionAttemptCount++; // ✅ Incrementa contador
-
-            var success = await _reconnectionManager.TryReconnectAsync(
-                reconnectAction: async () =>
-                {
-                    // ✅ Após 2 falhas, tenta SEM contexto
-                    if (_reconnectionAttemptCount >= 3)
-                    {
-                        _logger.LogWarning("Too many failures, clearing context for next attempt");
-                        await _contextManager.ClearContextAsync();
-                    }
-
-                    await ConnectAsync();
-                },
-                onCheckpoint: () => _contextManager.CreateCheckpoint(),
-                shouldContinue: () => ShouldAttemptReconnection()
-            );
-
-            if (success)
-            {
-                _reconnectionAttemptCount = 0; // ✅ Reset no sucesso
-            }
-            else
-            {
-                _logger.LogError("Failed to reconnect after multiple attempts");
-                await _interviewLogger.LogAsync("System", "Connection failed. Interview interrupted.");
-            }
         }
 
         private async Task HandleToolCallAsync(JsonElement toolCall)
@@ -606,7 +438,6 @@ namespace Brendha.Spike.Server.Services
                         await _interviewLogger.LogAsync("Candidato:", text ?? "");
                         _logger.LogInformation($"Candidato: {text}");
 
-                        await _contextManager.AddMessageAsync("Candidato", text);
                     }
                 }
                 else if (name == TOOL_NAME_AI_QUESTION)
@@ -617,7 +448,6 @@ namespace Brendha.Spike.Server.Services
                         var question = questionElement.GetString();
                         await _interviewLogger.LogAsync("Brendha (IA)", question ?? "");
                         _logger.LogInformation($"Brendha (IA): {question}");
-                        await _contextManager.AddMessageAsync("Brendha (IA)", question);
 
                         if (!string.IsNullOrEmpty(question))
                         {
@@ -653,5 +483,6 @@ namespace Brendha.Spike.Server.Services
                 finally { _ws = null!; }
             }
         }
+
     }
 }

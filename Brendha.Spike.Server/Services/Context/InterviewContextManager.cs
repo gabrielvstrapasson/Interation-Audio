@@ -1,171 +1,57 @@
-﻿using Microsoft.Extensions.Logging.Configuration;
-using System.Text;
+﻿using Brendha.Spike.Server.Infrastructure.Interfaces;
 
 namespace Brendha.Spike.Server.Services.Context
 {
-    public class InterviewContextManager(ILogger<InterviewContextManager> logger) : IDisposable
+    public class InterviewContextManager(
+        ILogger<InterviewContextManager> logger,
+        IInterviewLogger interviewLogger) : IDisposable
     {
-        private const int MAX_RECENT_MESSAGES = 12;
-        private const int CHECKPOINT_INTERVAL_SECONDS = 120;
-        private const int MESSAGE_TRUNCATE_LENGTH = 150;
-        private const int CHECKPOINT_VALIDITY_MINUTES = 10;
         private const int MAX_CONTEXT_LENGTH = 4000;
+        private const int MAX_RECENT_LINES = 20;
 
-        private readonly Queue<(string role, string message)> _recentMessages = new();
         private readonly SemaphoreSlim _contextLock = new(1, 1);
-
-        private string _lastCheckpointSummary = string.Empty;
-        private DateTime _lastCheckpointTime = DateTime.MinValue;
-        private Timer? _checkpointTimer;
         private bool _isDisposed = false;
 
-        public bool HasContext => _recentMessages.Count > 0 || !string.IsNullOrEmpty(_lastCheckpointSummary);
-
-        public void StartCheckpointTimer()
-        {
-            if (_isDisposed) return;
-
-            _checkpointTimer?.Dispose();
-            _checkpointTimer = new Timer(
-                _ => CreateCheckpoint(),
-                null,
-                TimeSpan.FromSeconds(CHECKPOINT_INTERVAL_SECONDS),
-                TimeSpan.FromSeconds(CHECKPOINT_INTERVAL_SECONDS)
-            );
-        }
-
-        public void StopCheckpointTimer()
-        {
-            _checkpointTimer?.Dispose();
-            _checkpointTimer = null;
-            logger.LogInformation("Checkpoint timer stopped.");
-        }
-
-        public async Task AddMessageAsync(string role, string message)
-        {
-            if (string.IsNullOrWhiteSpace(message)) return;
-
-            await _contextLock.WaitAsync();
-            try
-            {
-                _recentMessages.Enqueue((role, message));
-
-                while (_recentMessages.Count > MAX_RECENT_MESSAGES)
-                {
-                    _recentMessages.Dequeue();
-                }
-            }
-            finally
-            {
-                _contextLock.Release();
-            }
-        }
-
-        public void CreateCheckpoint()
-        {
-            if (_isDisposed) return;
-
-            try
-            {
-                _contextLock.Wait();
-                try
-                {
-                    if (_recentMessages.Count == 0)
-                    {
-                        logger.LogInformation("No messages to create checkpoint from.");
-                        return;
-                    }
-
-                    var summary = new StringBuilder();
-                    summary.AppendLine("Save context");
-
-                    foreach (var (role, message) in _recentMessages)
-                    {
-                        var truncatedMessage = message.Length > MESSAGE_TRUNCATE_LENGTH
-                            ? message[..MESSAGE_TRUNCATE_LENGTH] + "..."
-                            : message;
-                        summary.AppendLine($"{role}: {truncatedMessage}");
-                    }
-                    _lastCheckpointSummary = summary.ToString();
-                    _lastCheckpointTime = DateTime.UtcNow;
-
-                    logger.LogInformation($"Checkpoint created with {_recentMessages.Count} messages");
-                }
-                finally
-                {
-                    _contextLock.Release();
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error creating checkpoint");
-            }
-        }
-
+        public bool HasContext => !string.IsNullOrWhiteSpace(interviewLogger.GetHistory());
         public async Task<string> BuildReconnectionContextAsync()
         {
             await _contextLock.WaitAsync();
 
             try
             {
-                var context = new StringBuilder();
-                var checkpointAge = (DateTime.UtcNow - _lastCheckpointTime).TotalMinutes;
-                if (!string.IsNullOrWhiteSpace(_lastCheckpointSummary) &&
-                    checkpointAge < CHECKPOINT_VALIDITY_MINUTES)
+                var fullHistory = interviewLogger.GetHistory();
+
+                if (string.IsNullOrWhiteSpace(fullHistory))
                 {
-                    context.AppendLine("Before context (CHECKPOINT)");
-                    context.AppendLine(_lastCheckpointSummary);
-                    context.AppendLine();
+                    logger.LogInformation("No history available for reconnection context.");
+                    return string.Empty;
                 }
 
-                if (_recentMessages.Count > 0)
+                var lines = fullHistory.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                var recentLines = lines.TakeLast(MAX_RECENT_LINES).ToArray();
+
+                var context = string.Join('\n', recentLines);
+
+                if (context.Length > MAX_CONTEXT_LENGTH)
                 {
-                    context.AppendLine("Recent messages:");
-                    foreach (var (role, message) in _recentMessages)
-                    {
-                        context.AppendLine($"{role}: {message}");
-                    }
+                    context = context[..MAX_CONTEXT_LENGTH] + "\n...(truncado)";
                 }
 
-                var result = context.ToString();
 
-                if (result.Length > MAX_CONTEXT_LENGTH)
-                {
-                    logger.LogWarning($"Context too large {result.Length}, truncating to {MAX_CONTEXT_LENGTH}");
-                    result = result.Substring(0, MAX_CONTEXT_LENGTH) + "\n... (truncated)";
-                }
+                logger.LogInformation($"Context built: {context.Length} chars, {lines.Length} total messages");
 
-                if (!string.IsNullOrWhiteSpace(result))
-                {
-                    logger.LogInformation($"Reconnection context built: {result.Length} chars, {_recentMessages.Count} recent messages");
-                }
-                return result;
+                return context;
             }
             finally { _contextLock.Release(); }
-        }
-        public async Task ClearContextAsync()
-        {
-            await _contextLock.WaitAsync();
-            try
-            {
-                _recentMessages.Clear();
-                _lastCheckpointSummary = string.Empty;
-                _lastCheckpointTime = DateTime.MinValue;
-                logger.LogInformation("Context cleared");
-
-            }
-            finally
-            {
-                _contextLock.Release();
-            }
         }
 
         public void Dispose()
         {
             if (_isDisposed) return;
             _isDisposed = true;
-            StopCheckpointTimer();
             _contextLock?.Dispose();
         }
+
+
     }
 }

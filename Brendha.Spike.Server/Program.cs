@@ -2,8 +2,9 @@ using Brendha.Spike.Server.Hubs;
 using Brendha.Spike.Server.Infrastructure;
 using Brendha.Spike.Server.Infrastructure.Interfaces;
 using Brendha.Spike.Server.Services;
-using Brendha.Spike.Server.Services.Connection;
 using Brendha.Spike.Server.Services.Context;
+using Brendha.Spike.Server.Services.GeminiConnection;
+using Brendha.Spike.Server.Services.Interfaces;
 using Brendha.Spike.Server.Workers;
 using DotNetEnv;
 using Microsoft.AspNetCore.SignalR;
@@ -14,10 +15,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton<AudioStreamBuffer>();
 builder.Services.AddSingleton<IInterviewLogger, InterviewFileLogger>();
+builder.Services.AddSingleton<IGeminiReconnectionManager, GeminiReconnectionManager>();
 
 builder.Services.AddSingleton<InterviewContextManager>();
-builder.Services.AddSingleton<ReconnectionManager>();
-builder.Services.AddSingleton<SessionRenewalManager>();
 
 builder.Services.AddSingleton<GeminiLiveService>(sp =>
 {
@@ -32,8 +32,7 @@ builder.Services.AddSingleton<GeminiLiveService>(sp =>
         sp.GetRequiredService<IHubContext<InterviewHub>>(),
         sp.GetRequiredService<IInterviewLogger>(),
         sp.GetRequiredService<InterviewContextManager>(),
-        sp.GetRequiredService<ReconnectionManager>(),
-        sp.GetRequiredService<SessionRenewalManager>()
+        sp.GetRequiredService<IGeminiReconnectionManager>()
     );
 });
 
