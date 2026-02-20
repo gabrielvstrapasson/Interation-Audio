@@ -1,6 +1,7 @@
 using Brendha.Spike.Server.Hubs;
 using Brendha.Spike.Server.Infrastructure;
 using Brendha.Spike.Server.Infrastructure.Interfaces;
+using Brendha.Spike.Server.Interfaces;
 using Brendha.Spike.Server.Services;
 using Brendha.Spike.Server.Services.Context;
 using Brendha.Spike.Server.Services.GeminiConnection;
@@ -16,6 +17,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<AudioStreamBuffer>();
 builder.Services.AddSingleton<IInterviewLogger, InterviewFileLogger>();
 builder.Services.AddSingleton<IGeminiReconnectionManager, GeminiReconnectionManager>();
+builder.Services.AddSingleton<IResumePdfAnalyzer, ImgAnalyzerPdfService>();
 
 builder.Services.AddSingleton<InterviewContextManager>();
 

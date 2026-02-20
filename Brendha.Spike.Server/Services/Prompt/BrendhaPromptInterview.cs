@@ -1,5 +1,4 @@
 ﻿using Brendha.Spike.Core.Models;
-using Brendha.Spike.Core.Models.Gemini;
 using System.Text.Json;
 
 namespace Brendha.Spike.Server.Services.Prompt

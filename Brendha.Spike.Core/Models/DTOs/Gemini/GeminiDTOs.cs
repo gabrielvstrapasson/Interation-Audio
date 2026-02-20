@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Text.Json.Serialization;
 
-namespace Brendha.Spike.Core.Models.Gemini
+namespace Brendha.Spike.Core.Models.DTOs.Gemini
 {
     public record GeminiSetupRequest(GeminiSetup setup);
     public record GeminiSetup(

@@ -1,5 +1,5 @@
 ﻿using Brendha.Spike.Core.Models;
-using Brendha.Spike.Core.Models.Gemini;
+using Brendha.Spike.Core.Models.DTOs.Gemini;
 using Brendha.Spike.Server.Hubs;
 using Brendha.Spike.Server.Infrastructure.Interfaces;
 using Brendha.Spike.Server.Services.Context;
@@ -38,7 +38,6 @@ namespace Brendha.Spike.Server.Services
         private bool _isWaitingForFirstResponse = false;
         private bool _aiIsSpeaking = false;
         private bool _isDisposed = false;
-        private bool _isRenewingSession = false;
         private bool _isReceiveLoopRunning = false;
         private readonly object _receiveLoopLock = new();
 
