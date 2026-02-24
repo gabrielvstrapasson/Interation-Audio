@@ -1,4 +1,4 @@
-﻿using Brendha.Spike.Server.Infrastructure.Interfaces;
+﻿using Brendha.Spike.Server.Interfaces.Logger;
 using Microsoft.AspNetCore.Components.Web;
 using System.Runtime.CompilerServices;
 using System.Text;

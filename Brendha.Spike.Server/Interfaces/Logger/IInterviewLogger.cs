@@ -1,4 +1,4 @@
-﻿namespace Brendha.Spike.Server.Infrastructure.Interfaces
+﻿namespace Brendha.Spike.Server.Interfaces.Logger
 {
     public interface IInterviewLogger
     {

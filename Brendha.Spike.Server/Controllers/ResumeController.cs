@@ -1,4 +1,4 @@
-﻿using Brendha.Spike.Server.Services;
+﻿using Brendha.Spike.Server.Services.Resume;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 

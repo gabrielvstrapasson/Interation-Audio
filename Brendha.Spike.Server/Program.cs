@@ -1,10 +1,18 @@
 using Brendha.Spike.Server.Hubs;
 using Brendha.Spike.Server.Infrastructure;
-using Brendha.Spike.Server.Infrastructure.Interfaces;
-using Brendha.Spike.Server.Services;
+using Brendha.Spike.Server.Interfaces.Connection;
+using Brendha.Spike.Server.Interfaces.Helpers;
+using Brendha.Spike.Server.Interfaces.Logger;
+using Brendha.Spike.Server.Interfaces.Processing;
+using Brendha.Spike.Server.Interfaces.Resume;
+using Brendha.Spike.Server.Interfaces.Transport;
+using Brendha.Spike.Server.Services.Connection;
 using Brendha.Spike.Server.Services.Context;
-using Brendha.Spike.Server.Services.GeminiConnection;
-using Brendha.Spike.Server.Services.Interfaces;
+using Brendha.Spike.Server.Services.Gemini;
+using Brendha.Spike.Server.Services.Gemini.Helpers;
+using Brendha.Spike.Server.Services.Processing;
+using Brendha.Spike.Server.Services.Resume;
+using Brendha.Spike.Server.Services.Transport;
 using Brendha.Spike.Server.Workers;
 using DotNetEnv;
 using Microsoft.AspNetCore.SignalR;
@@ -16,9 +24,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<AudioStreamBuffer>();
 builder.Services.AddSingleton<IInterviewLogger, InterviewFileLogger>();
 builder.Services.AddSingleton<IGeminiReconnectionManager, GeminiReconnectionManager>();
-
+builder.Services.AddSingleton<IResumePdfAnalyzer, ImgAnalyzerPdfService>();
 builder.Services.AddSingleton<InterviewContextManager>();
-
+builder.Services.AddSingleton<IWebSocketClient, WebSocketClient>();
+builder.Services.AddSingleton<IGeminiMessageProcessor, GeminiMessageProcessor>();
+builder.Services.AddSingleton<IToolCallHandler, ToolCallHandler>();
+builder.Services.AddSingleton<IGeminiSetupConfigBuilder, GeminiSetupConfigBuilder>();
 builder.Services.AddSingleton<GeminiLiveService>(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
@@ -32,7 +43,12 @@ builder.Services.AddSingleton<GeminiLiveService>(sp =>
         sp.GetRequiredService<IHubContext<InterviewHub>>(),
         sp.GetRequiredService<IInterviewLogger>(),
         sp.GetRequiredService<InterviewContextManager>(),
-        sp.GetRequiredService<IGeminiReconnectionManager>()
+        sp.GetRequiredService<IGeminiReconnectionManager>(),
+        sp.GetRequiredService<IWebSocketClient>(),
+        sp.GetRequiredService<IGeminiMessageProcessor>(),
+        sp.GetRequiredService<IToolCallHandler>(),
+        sp.GetRequiredService<IGeminiSetupConfigBuilder>()
+
     );
 });
 

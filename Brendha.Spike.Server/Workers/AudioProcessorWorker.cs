@@ -1,6 +1,6 @@
 ﻿using Brendha.Spike.Server.Hubs;
 using Brendha.Spike.Server.Infrastructure;
-using Brendha.Spike.Server.Services;
+using Brendha.Spike.Server.Services.Gemini;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Brendha.Spike.Server.Workers
