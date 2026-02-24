@@ -1,8 +1,8 @@
-﻿using Brendha.Spike.Server.Interfaces;
+﻿using Brendha.Spike.Server.Interfaces.Resume;
 using System.Net.Http.Headers;
 using System.Text.Json;
 
-namespace Brendha.Spike.Server.Services
+namespace Brendha.Spike.Server.Services.Resume
 {
     public class ImgAnalyzerPdfService (
         IHttpClientFactory httpClientFactory,

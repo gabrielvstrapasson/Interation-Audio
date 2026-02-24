@@ -1,6 +1,6 @@
 ﻿using System.Net.WebSockets;
 
-namespace Brendha.Spike.Server.Services.Interfaces
+namespace Brendha.Spike.Server.Interfaces.Connection
 {
     public interface IGeminiReconnectionManager
     {

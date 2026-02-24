@@ -1,4 +1,4 @@
-﻿using Brendha.Spike.Server.Infrastructure.Interfaces;
+﻿using Brendha.Spike.Server.Interfaces.Logger;
 
 namespace Brendha.Spike.Server.Services.Context
 {

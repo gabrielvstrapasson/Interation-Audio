@@ -1,21 +1,19 @@
-﻿using Brendha.Spike.Core.Models;
-using Brendha.Spike.Core.Models.DTOs.Gemini;
+﻿using Brendha.Spike.Core.Models.DTOs.Gemini;
 using Brendha.Spike.Server.Hubs;
-using Brendha.Spike.Server.Infrastructure.Interfaces;
+using Brendha.Spike.Server.Interfaces.Connection;
+using Brendha.Spike.Server.Interfaces.Helpers;
+using Brendha.Spike.Server.Interfaces.Logger;
 using Brendha.Spike.Server.Interfaces.Processing;
 using Brendha.Spike.Server.Interfaces.Transport;
 using Brendha.Spike.Server.Services.Context;
 using Brendha.Spike.Server.Services.Data;
-using Brendha.Spike.Server.Services.Interfaces;
-using Brendha.Spike.Server.Services.Prompt;
 using Microsoft.AspNetCore.SignalR;
 using System.Diagnostics;
 using System.Net.WebSockets;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 
-namespace Brendha.Spike.Server.Services
+namespace Brendha.Spike.Server.Services.Gemini
 {
     public class GeminiLiveService(
         string apiKey,
@@ -25,31 +23,27 @@ namespace Brendha.Spike.Server.Services
         InterviewContextManager contextManager,
         IGeminiReconnectionManager reconnectionManager,
         IWebSocketClient webSocketClient,
-        IGeminiMessageProcessor messageProcessor
+        IGeminiMessageProcessor messageProcessor,
+        IToolCallHandler toolCallHandler,
+        IGeminiSetupConfigBuilder setupConfigBuilder
         ) : IDisposable
     {
 
         private const string GeminiUrl = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent";
-        private const string TOOL_NAME = "registrar_fala_usuario";
-        private const string TOOL_NAME_AI_QUESTION = "registrar_pergunta_ia";
-
         private string _apiKey = apiKey;
-
         private readonly SemaphoreSlim _wsSemaphore = new(1, 1);
         private DateTime _sessionEndTime;
-
         private string _pendingResumeText;
         private string _currentResumeText;
-
         private readonly Stopwatch _latencyWatch = new();
         private bool _isWaitingForFirstResponse = false;
         private bool _aiIsSpeaking = false;
         private bool _isDisposed = false;
         private bool _isReceiveLoopRunning = false;
         private readonly object _receiveLoopLock = new();
-
         private readonly IWebSocketClient _webSocketClient = webSocketClient;
         private readonly IGeminiMessageProcessor _messageProcessor = messageProcessor;
+        private readonly IToolCallHandler _toolCallHandler = toolCallHandler;
 
         public event Func<byte[], Task>? OnAudioReceived;
 
@@ -77,7 +71,7 @@ namespace Brendha.Spike.Server.Services
                     logger.LogInformation("WebSocket already connected");
                     return;
                 }
-               
+
                 await _webSocketClient.ConnectAsync(new Uri($"{GeminiUrl}?key={_apiKey}"), CancellationToken.None);
                 logger.LogInformation("WebSocket connected, initializing session...");
             }
@@ -161,7 +155,10 @@ namespace Brendha.Spike.Server.Services
             {
                 try
                 {
-                    await HandleToolCallAsync(toolCall);
+                    var responses = await _toolCallHandler.HandleAsync(toolCall);
+                    var payload = new ToolCallResponse(new ToolResponsePayload(responses));
+                    var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+                    await SendJsonAsync(JsonSerializer.Serialize(payload, options));
                 }
                 catch (Exception ex)
                 {
@@ -293,7 +290,7 @@ namespace Brendha.Spike.Server.Services
             }
             else { logger.LogInformation("Starting fresh interview"); }
 
-            var config = CreateSetupConfig(job, _currentResumeText, reconnectionContext);
+            var config = setupConfigBuilder.Build(job, _currentResumeText, reconnectionContext);
 
             var options = new JsonSerializerOptions
             {
@@ -309,62 +306,10 @@ namespace Brendha.Spike.Server.Services
         private async Task SendJsonInternalAsync(string json)
         {
             if (_webSocketClient?.State != WebSocketState.Open) return;
-           
+
             await _webSocketClient.SendTextAsync(json, CancellationToken.None);
         }
-        private GeminiSetupRequest CreateSetupConfig(JobPosition job, string resumeText, string? reconnectionContext = null)
-        {
-            var systemInstructionText = BrendhaPromptInterview.Build(job, resumeText);
-
-            if (!string.IsNullOrWhiteSpace(reconnectionContext))
-            {
-                systemInstructionText += "\n " +
-                    "History recovery\n" +
-                    "Important: continue the interview based on the following history of the conversation. Use it to adapt your next questions and answers, but do not repeat the same information again:\n" +
-                    "Do not introduce your self again. " +
-                    $"Context recovery: {reconnectionContext}";
-            }
-
-            return new GeminiSetupRequest(new GeminiSetup(
-                Model: "models/gemini-2.5-flash-native-audio-latest",
-                GenerationConfig: new GenerationConfig(
-                    ResponseModalities: new[] { "AUDIO" },
-                    SpeechConfig: new SpeechConfig(new VoiceConfig(new PrebuiltVoiceConfig("Aoede")))
-                    ),
-                    SystemInstruction: new SystemInstruction(new[] { new Part(systemInstructionText) }),
-                    Tools: new List<Tool>
-                    {
-                        new Tool(new List<FunctionDeclaration>
-                        {
-                            new FunctionDeclaration(
-                                Name: TOOL_NAME,
-                                Description: "Record the candidate's speech.",
-                                Parameters: new FunctionParameters(
-                                    Type: "OBJECT",
-                                    Properties: new Dictionary<string, PropertyDetail>
-                                    {
-                                        { "texto_entendido", new PropertyDetail("STRING", "Texto exato da fala.") }
-                                    },
-                                    Required: new[] { "texto_entendido" }
-                                )
-                            ),
-
-                            new FunctionDeclaration(
-                                Name: TOOL_NAME_AI_QUESTION,
-                                Description: "Record your own question or statement to the candidate for logging purposes.",
-                                Parameters: new FunctionParameters(
-                                    Type: "OBJECT",
-                                    Properties: new Dictionary<string, PropertyDetail>
-                                    {
-                                        {"minha_pergunta", new PropertyDetail("STRING", "The exact question or statement you just asked/said to the candidate") }
-                                    },
-                                    Required: new[] {"minha_pergunta"}
-                                    )
-                                )
-                        })
-                    }
-                ));
-        }
+       
         private async Task ReceiveLoopAsync()
         {
             while (!_isDisposed)
@@ -429,50 +374,6 @@ namespace Brendha.Spike.Server.Services
             logger.LogInformation("Receive loop ended");
         }
 
-        private async Task HandleToolCallAsync(JsonElement toolCall)
-        {
-            if (!toolCall.TryGetProperty("functionCalls", out var functionCalls)) return;
-
-            var responses = new List<FunctionResponse>();
-
-            foreach (var call in functionCalls.EnumerateArray())
-            {
-                var name = call.GetProperty("name").GetString();
-                var id = call.GetProperty("id").GetString();
-
-                if (name == TOOL_NAME)
-                {
-                    var args = call.GetProperty("args");
-                    if (args.TryGetProperty("texto_entendido", out var txtElement))
-                    {
-                        var text = txtElement.GetString();
-                        await interviewLogger.LogAsync("Candidato:", text ?? "");
-                        logger.LogInformation($"Candidato: {text}");
-
-                    }
-                }
-                else if (name == TOOL_NAME_AI_QUESTION)
-                {
-                    var args = call.GetProperty("args");
-                    if (args.TryGetProperty("minha_pergunta", out var questionElement))
-                    {
-                        var question = questionElement.GetString();
-                        await interviewLogger.LogAsync("Brendha (IA)", question ?? "");
-                        logger.LogInformation($"Brendha (IA): {question}");
-
-                        if (!string.IsNullOrEmpty(question))
-                        {
-                            await hubContext.Clients.All.SendAsync("ReceiveAIQuestion", question);
-                        }
-                    }
-                }
-
-                responses.Add(new FunctionResponse(new { result = "ok" }, id!));
-            }
-            var payload = new ToolCallResponse(new ToolResponsePayload(responses));
-            var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
-            await SendJsonAsync(JsonSerializer.Serialize(payload, options));
-        }
         private async Task SendJsonAsync(string json)
         {
             await SendJsonInternalAsync(json);
