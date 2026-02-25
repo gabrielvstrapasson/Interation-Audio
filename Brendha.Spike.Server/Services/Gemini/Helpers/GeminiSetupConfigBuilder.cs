@@ -10,7 +10,7 @@ namespace Brendha.Spike.Server.Services.Gemini.Helpers
     {
         public GeminiSetupRequest Build(JobPosition job, string resumeText, string? reconnectionContext = null)
         {
-            var systemInstructionText = BrendhaPromptInterview.Build(job, resumeText);
+            var systemInstructionText = InterviewPrompt.Build(job, resumeText);
 
             if (!string.IsNullOrWhiteSpace(reconnectionContext))
             {
@@ -28,6 +28,8 @@ namespace Brendha.Spike.Server.Services.Gemini.Helpers
                     SpeechConfig: new SpeechConfig(new VoiceConfig(new PrebuiltVoiceConfig("Aoede")))
                     ),
                     SystemInstruction: new SystemInstruction(new[] { new Part(systemInstructionText) }),
+                    InputAudioTranscription: new { },
+                    OutputAudioTranscription: new { },
                     Tools: new List<Tool>
                     {
                         new Tool(new List<FunctionDeclaration>

@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace Brendha.Spike.Server.Services.Prompt
 {
-    public class BrendhaPromptInterview
+    public class InterviewPrompt
     {
         public static string Build(JobPosition job, string resumeText)
         {
@@ -35,8 +35,11 @@ namespace Brendha.Spike.Server.Services.Prompt
 
                 output_rules = new
                 {
+                    no_thinking_aloud = "CRITICAL: NEVER output internal thoughts, reasoning, action descriptions, or process descriptions. DO NOT write about what you are doing. NO text like '**Assessing**', '**Thinking**', '**Analyzing**', or '**Confirming**'.",
                     audio_only = "Generate ONLY the actual interview dialogue. Speak directly to the candidate.",
-                    direct_speech = "Output ONLY what you would say out loud to the candidate. Nothing else."
+                    direct_speech = "Output ONLY what you would say out loud to the candidate in Portuguese. Nothing else.",
+                    no_markdown = "Do NOT use Markdown formatting (*, #, etc) in your responses.",
+                    role_enforcement = "CRITICAL INSTRUCTION: You are a VOICE IN AN INTERVIEW. You do NOT have a brain that thinks in text."
                 },
 
 
@@ -71,18 +74,11 @@ namespace Brendha.Spike.Server.Services.Prompt
 
                 interaction_flow = new
                 {
-                    tools = new
-                    {
-                        user_speech = "Call 'registrar_fala_usuario' immediately AFTER the candidate finishes speaking (send exact recognized text).",
-                        ai_question = "Before speaking any question/statement out loud, CALL 'registrar_pergunta_ia' with the exact text you will say. Then generate audio.",
-                        audio = "Generate audio only AFTER calling the ai_question tool."
-                    },
-
-                    workflow = "1) Formulate question silently → 2) Call 'registrar_pergunta_ia' with exact question text → 3) Emit audio of that question → 4) Wait candidate response → 5) Call 'registrar_fala_usuario' with candidate's spoken text → 6) Repeat",
+                    workflow = "Listen to candidate → Formulate next question silently → Speak directly to the candidate.",
 
                     start = hasResume
-                        ? "START SEQUENCE: 1) Call 'registrar_pergunta_ia' with: 'Olá, [Nome]. Sou a Brendha, recrutadora tech. Tudo bem?' → speak it. 2) After reply, call 'registrar_pergunta_ia' with: 'Vamos conversar sobre a vaga de [Title]. Li seu currículo.' → speak it. 3) Then ask first technical question following the workflow."
-                        : "BLOCK SEQUENCE: 1) Call 'registrar_pergunta_ia' with: 'Olá! Sou a Brendha, recrutadora da vaga de [Title].' → speak it. 2) Call 'registrar_pergunta_ia' with: 'Para iniciarmos, preciso que você envie seu currículo pelo botão de upload.' → speak it. 3) Wait until resume is uploaded."
+                        ? "START SEQUENCE: Say: 'Olá, [Nome]. Sou a Brendha, recrutadora tech. Tudo bem?' Wait for reply. Then say: 'Vamos conversar sobre a vaga de [Title]. Li seu currículo.' Then ask the first technical question."
+                        : "BLOCK SEQUENCE: Say: 'Olá! Sou a Brendha, recrutadora da vaga de [Title].' Then say: 'Para iniciarmos, preciso que você envie seu currículo pelo botão de upload.' Wait until resume is uploaded."
                 }
             };
 

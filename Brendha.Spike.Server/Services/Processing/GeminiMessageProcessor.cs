@@ -1,5 +1,7 @@
 ﻿using Brendha.Spike.Server.Interfaces.Processing;
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Brendha.Spike.Server.Services.Processing
 {
@@ -7,8 +9,16 @@ namespace Brendha.Spike.Server.Services.Processing
         ILogger<GeminiMessageProcessor> logger) : IGeminiMessageProcessor
     {
         public event Func<byte[], Task>? OnAudioReceived;
-        public event Func<JsonElement, Task>? OnToolCallReceived;
+        public event Func<string, Task>? OnAITextChunkReceived;
+       
+        public event Func<string, Task>? OnAITextReceived;
+
+        public event Func<string, Task>? OnUserTextReceived;
         public event Func<Task>? OnTurnComplete;
+        public event Func<JsonElement, Task>? OnToolCallReceived;
+
+        private readonly StringBuilder _aiTextBuffer = new();
+        private readonly StringBuilder _userTextBuffer = new();
 
         public async Task ProcessAsync(string json)
         {
@@ -18,16 +28,6 @@ namespace Brendha.Spike.Server.Services.Processing
             {
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
-
-                if (root.TryGetProperty("toolCall", out var toolCall))
-                {
-                    if (OnToolCallReceived != null)
-                    {
-                        try { await OnToolCallReceived.Invoke(toolCall); }
-                        catch (Exception ex) { logger.LogError(ex, "Error in OnToolCallReceived handler"); }
-                    }
-
-                }
 
                 if (root.TryGetProperty("serverContent", out var serverContent))
                 {
@@ -41,35 +41,87 @@ namespace Brendha.Spike.Server.Services.Processing
                                 if (inlineData.TryGetProperty("data", out var dataEl))
                                 {
                                     var base64 = dataEl.GetString();
-                                    if (!string.IsNullOrEmpty(base64))
+                                    if (!string.IsNullOrEmpty(base64) && OnAudioReceived != null)
                                     {
                                         try
                                         {
                                             var bytes = Convert.FromBase64String(base64);
-                                            if (OnAudioReceived != null)
-                                            {
-                                                try { await OnAudioReceived.Invoke(bytes); }
-                                                catch (Exception ex) { logger.LogError(ex, "Error in OnAudioReceived handler"); }
-                                            }
+                                            await OnAudioReceived.Invoke(bytes);
                                         }
-                                        catch (FormatException fe)
-                                        {
-                                            logger.LogWarning(fe, "Invalid base64 audio string received");
-                                        }
+                                        catch (Exception ex) { logger.LogWarning("Error to process audio " + ex.Message); }
+                                    }
+                                }
+                            }
+                            if (part.TryGetProperty("text", out var textEl))
+                            {
+                                var text = textEl.GetString();
+                                if (!string.IsNullOrEmpty(text) && !text.TrimStart().StartsWith("**"))
+                                {
+                                    _aiTextBuffer.Append(text);
+
+                                    if (OnAITextChunkReceived != null)
+                                    {
+                                        try { await OnAITextChunkReceived.Invoke(text); }
+                                        catch { }
                                     }
                                 }
                             }
                         }
                     }
+
+                    if (serverContent.TryGetProperty("input_transcription", out var inputTrans))
+                    {
+                        if (inputTrans.TryGetProperty("text", out var userTextEl))
+                        {
+                            var userText = userTextEl.GetString();
+                            if (!string.IsNullOrEmpty(userText))
+                            {
+                                _userTextBuffer.Append(userText);
+                            }
+                        }
+                        else if (inputTrans.TryGetProperty("parts", out var inputParts))
+                        {
+                            foreach (var part in inputParts.EnumerateArray())
+                            {
+                                if (part.TryGetProperty("text", out var ptText))
+                                {
+                                    var txt = ptText.GetString();
+                                    if (!string.IsNullOrWhiteSpace(txt))
+                                    {
+                                        _userTextBuffer.Append(txt);
+                                    }
+                                }
+                            }
+                        }
+                        await FlushUserBufferAsync();
+                    }
+                    if (serverContent.TryGetProperty("output_transcription", out var outputTrans))
+                    {
+                        if (outputTrans.TryGetProperty("text", out var aiTextEl))
+                        {
+                            var aiText = aiTextEl.GetString();
+                            if (!string.IsNullOrEmpty(aiText) && !aiText.TrimStart().StartsWith("**"))
+                            {
+                                _aiTextBuffer.Append(aiText);
+                            }
+                        }
+                    }
+
+                    if (serverContent.TryGetProperty("interrupted", out var interrupted) && interrupted.GetBoolean())
+                    {
+                        await FlushAIBufferAsync();
+                    }
+
                     if (serverContent.TryGetProperty("turnComplete", out _))
                     {
+                        await FlushAIBufferAsync();
+
                         if (OnTurnComplete != null)
                         {
                             try { await OnTurnComplete.Invoke(); }
                             catch (Exception ex) { logger.LogError(ex, "Error in OnTurnComplete handler"); }
                         }
                     }
-
                 }
             }
             catch (JsonException jex)
@@ -80,7 +132,46 @@ namespace Brendha.Spike.Server.Services.Processing
             {
                 logger.LogError(ex, "Unexpected error in GeminiMessageProcessor.ProcessAsync");
             }
+        }
 
+        private async Task FlushUserBufferAsync()
+        {
+            if (_userTextBuffer.Length > 0)
+            {
+                var fullUserText = _userTextBuffer.ToString().Trim();
+
+                if (fullUserText == "<noise>" || fullUserText == ".")
+                {
+                    _userTextBuffer.Clear();
+                    return;
+                }
+
+                if (!string.IsNullOrWhiteSpace(fullUserText) && OnUserTextReceived != null)
+                {
+                    try { await OnUserTextReceived.Invoke(fullUserText); }
+                    catch (Exception ex) { logger.LogError(ex, "Error flushing user text buffer: " + ex.Message); }
+                }
+
+                _userTextBuffer.Clear();
+            }
+        }
+
+        private async Task FlushAIBufferAsync()
+        {
+            if (_aiTextBuffer.Length > 0)
+            {
+                var fullAiText = _aiTextBuffer.ToString().Trim();
+
+                fullAiText = Regex.Unescape(fullAiText);
+
+                if (!string.IsNullOrWhiteSpace(fullAiText) && OnAITextReceived != null)
+                {
+                    try { await OnAITextReceived.Invoke(fullAiText); }
+                    catch (Exception ex) { logger.LogError(ex, "Error flushing AI text buffer: " + ex.Message); }
+                }
+
+                _aiTextBuffer.Clear();
+            }
         }
     }
 }

@@ -24,7 +24,6 @@ namespace Brendha.Spike.Server.Services.Gemini
         IGeminiReconnectionManager reconnectionManager,
         IWebSocketClient webSocketClient,
         IGeminiMessageProcessor messageProcessor,
-        IToolCallHandler toolCallHandler,
         IGeminiSetupConfigBuilder setupConfigBuilder
         ) : IDisposable
     {
@@ -43,7 +42,6 @@ namespace Brendha.Spike.Server.Services.Gemini
         private readonly object _receiveLoopLock = new();
         private readonly IWebSocketClient _webSocketClient = webSocketClient;
         private readonly IGeminiMessageProcessor _messageProcessor = messageProcessor;
-        private readonly IToolCallHandler _toolCallHandler = toolCallHandler;
 
         public event Func<byte[], Task>? OnAudioReceived;
 
@@ -151,18 +149,39 @@ namespace Brendha.Spike.Server.Services.Gemini
                 }
             };
 
-            _messageProcessor.OnToolCallReceived += async (toolCall) =>
+            _messageProcessor.OnAITextReceived += async (text) =>
             {
                 try
                 {
-                    var responses = await _toolCallHandler.HandleAsync(toolCall);
-                    var payload = new ToolCallResponse(new ToolResponsePayload(responses));
-                    var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
-                    await SendJsonAsync(JsonSerializer.Serialize(payload, options));
+                    await interviewLogger.LogAsync("Brendha (AI): ", text);
+                    logger.LogInformation($"Brendha(IA): {text}");
                 }
                 catch (Exception ex)
                 {
                     logger.LogError(ex, "Error handling toolCall from message processor");
+                }
+            };
+
+            _messageProcessor.OnAITextChunkReceived += async (chunk) =>
+            {
+                try
+                {
+                    await hubContext.Clients.All.SendAsync("ReceiveAIQuestion", chunk);
+                }
+                catch (Exception ex) { logger.LogError(ex, "Error sending AI text chunk to front"); }
+            };
+
+
+            _messageProcessor.OnUserTextReceived += async (text) =>
+            {
+                try
+                {
+                    await interviewLogger.LogAsync("Candidate: ", text);
+                    logger.LogInformation($"Candidate: {text}");
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error handling user text from message processor");
                 }
             };
 
@@ -309,7 +328,7 @@ namespace Brendha.Spike.Server.Services.Gemini
 
             await _webSocketClient.SendTextAsync(json, CancellationToken.None);
         }
-       
+
         private async Task ReceiveLoopAsync()
         {
             while (!_isDisposed)
