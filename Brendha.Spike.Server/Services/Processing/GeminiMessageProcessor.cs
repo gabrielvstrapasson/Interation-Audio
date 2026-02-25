@@ -18,7 +18,7 @@ namespace Brendha.Spike.Server.Services.Processing
         public event Func<JsonElement, Task>? OnToolCallReceived;
 
         private readonly StringBuilder _aiTextBuffer = new();
-        private readonly StringBuilder _userTextBuffer = new();
+        private string _lastUserText = string.Empty;
 
         public async Task ProcessAsync(string json)
         {
@@ -81,11 +81,12 @@ namespace Brendha.Spike.Server.Services.Processing
                             var userText = userTextEl.GetString();
                             if (!string.IsNullOrEmpty(userText))
                             {
-                                _userTextBuffer.Append(userText);
+                                _lastUserText = userText;
                             }
                         }
                         else if (inputTrans.TryGetProperty("parts", out var inputParts))
                         {
+                            var sb = new StringBuilder();
                             foreach (var part in inputParts.EnumerateArray())
                             {
                                 if (part.TryGetProperty("text", out var ptText))
@@ -93,13 +94,17 @@ namespace Brendha.Spike.Server.Services.Processing
                                     var txt = ptText.GetString();
                                     if (!string.IsNullOrWhiteSpace(txt))
                                     {
-                                        _userTextBuffer.Append(txt);
+                                        sb.Append(txt);
                                     }
                                 }
                             }
+                            if (sb.Length > 0)
+                            {
+                                _lastUserText = sb.ToString();
+                            }
                         }
-                        await FlushUserBufferAsync();
                     }
+
                     if (serverContent.TryGetProperty("outputTranscription", out var outputTrans) ||
                         serverContent.TryGetProperty("output_transcription", out outputTrans))
                     {
@@ -109,6 +114,12 @@ namespace Brendha.Spike.Server.Services.Processing
                             if (!string.IsNullOrEmpty(aiText) && !aiText.TrimStart().StartsWith("**"))
                             {
                                 _aiTextBuffer.Append(aiText);
+
+                                if (OnAITextChunkReceived != null)
+                                {
+                                    try { await OnAITextChunkReceived.Invoke(aiText); }
+                                    catch (Exception ex) { logger.LogWarning("Error sending text chunk: " + ex.Message); }
+                                }
                             }
                         }
                     }
@@ -120,6 +131,7 @@ namespace Brendha.Spike.Server.Services.Processing
 
                     if (serverContent.TryGetProperty("turnComplete", out _))
                     {
+                        await FlushUserBufferAsync();
                         await FlushAIBufferAsync();
 
                         if (OnTurnComplete != null)
@@ -142,13 +154,13 @@ namespace Brendha.Spike.Server.Services.Processing
 
         private async Task FlushUserBufferAsync()
         {
-            if (_userTextBuffer.Length > 0)
+            var fullUserText = _lastUserText.Trim();
+            if (fullUserText.Length > 0)
             {
-                var fullUserText = _userTextBuffer.ToString().Trim();
 
                 if (fullUserText == "<noise>" || fullUserText == ".")
                 {
-                    _userTextBuffer.Clear();
+                    _lastUserText = string.Empty;
                     return;
                 }
 
@@ -158,7 +170,7 @@ namespace Brendha.Spike.Server.Services.Processing
                     catch (Exception ex) { logger.LogError(ex, "Error flushing user text buffer: " + ex.Message); }
                 }
 
-                _userTextBuffer.Clear();
+                _lastUserText = string.Empty;
             }
         }
 
