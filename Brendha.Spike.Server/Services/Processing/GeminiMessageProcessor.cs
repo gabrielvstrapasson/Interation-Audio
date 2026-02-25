@@ -10,7 +10,7 @@ namespace Brendha.Spike.Server.Services.Processing
     {
         public event Func<byte[], Task>? OnAudioReceived;
         public event Func<string, Task>? OnAITextChunkReceived;
-       
+
         public event Func<string, Task>? OnAITextReceived;
 
         public event Func<string, Task>? OnUserTextReceived;
@@ -61,15 +61,20 @@ namespace Brendha.Spike.Server.Services.Processing
 
                                     if (OnAITextChunkReceived != null)
                                     {
-                                        try { await OnAITextChunkReceived.Invoke(text); }
-                                        catch { }
+                                        try
+                                        {
+                                            var cleanChunk = Regex.Unescape(text);
+                                            await OnAITextChunkReceived.Invoke(cleanChunk);
+                                        }
+                                        catch (Exception ex) { logger.LogWarning("Error sending text chunk: " + ex.Message); }
                                     }
                                 }
                             }
                         }
                     }
 
-                    if (serverContent.TryGetProperty("input_transcription", out var inputTrans))
+                    if (serverContent.TryGetProperty("inputTranscription", out var inputTrans) ||
+                        serverContent.TryGetProperty("input_transcription", out inputTrans))
                     {
                         if (inputTrans.TryGetProperty("text", out var userTextEl))
                         {
@@ -95,7 +100,8 @@ namespace Brendha.Spike.Server.Services.Processing
                         }
                         await FlushUserBufferAsync();
                     }
-                    if (serverContent.TryGetProperty("output_transcription", out var outputTrans))
+                    if (serverContent.TryGetProperty("outputTranscription", out var outputTrans) ||
+                        serverContent.TryGetProperty("output_transcription", out outputTrans))
                     {
                         if (outputTrans.TryGetProperty("text", out var aiTextEl))
                         {
