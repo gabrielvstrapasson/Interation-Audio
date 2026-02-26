@@ -32,6 +32,8 @@ builder.Services.AddSingleton<IWebSocketClient, WebSocketClient>();
 builder.Services.AddSingleton<IGeminiMessageProcessor, GeminiMessageProcessor>();
 builder.Services.AddSingleton<IGeminiSetupConfigBuilder, GeminiSetupConfigBuilder>();
 builder.Services.AddSingleton<IGeminiFeedbackAgent, GeminiFeedbackAgent>();
+builder.Services.AddSingleton<IFeedbackGeminiClient, FeedbackGeminiClient>();
+
 builder.Services.AddSingleton<GeminiLiveService>(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
@@ -40,7 +42,6 @@ builder.Services.AddSingleton<GeminiLiveService>(sp =>
     if (string.IsNullOrEmpty(apiKey)) throw new Exception("API Key is not configured.");
 
     return new GeminiLiveService(
-        apiKey,
         sp.GetRequiredService<ILogger<GeminiLiveService>>(),
         sp.GetRequiredService<IHubContext<InterviewHub>>(),
         sp.GetRequiredService<IInterviewLogger>(),
@@ -48,8 +49,9 @@ builder.Services.AddSingleton<GeminiLiveService>(sp =>
         sp.GetRequiredService<IGeminiReconnectionManager>(),
         sp.GetRequiredService<IWebSocketClient>(),
         sp.GetRequiredService<IGeminiMessageProcessor>(),
-        sp.GetRequiredService<IGeminiSetupConfigBuilder>()
-
+        sp.GetRequiredService<IGeminiSetupConfigBuilder>(),
+        sp.GetRequiredService<IGeminiFeedbackAgent>(),
+        sp.GetRequiredService<IConfiguration>()
     );
 });
 
@@ -83,6 +85,8 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<ResumeProcessingService>();
 
 var app = builder.Build();
+
+
 
 if (app.Environment.IsDevelopment())
 {

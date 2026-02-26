@@ -2,6 +2,7 @@
 {
     public interface IInterviewLogger
     {
+        string LogFilePath { get; }
         Task LogAsync(string role, string message);
         string GetHistory();
     }

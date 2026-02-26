@@ -18,7 +18,7 @@ namespace Brendha.Spike.Core.Models.DTOs.Gemini
 
     public record GenerationConfig(
     [property: JsonPropertyName("response_modalities")] string[] ResponseModalities,
-    [property: JsonPropertyName("speech_config")] SpeechConfig SpeechConfig
+    [property: JsonPropertyName("speech_config")] SpeechConfig? SpeechConfig
     );
 
 

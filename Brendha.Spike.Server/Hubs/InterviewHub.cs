@@ -99,9 +99,10 @@ namespace Brendha.Spike.Server.Hubs
         {
             try
             {
-                await geminiService.DisconnectAsync();
+                var feedbackResult = await geminiService.DisconnectAsync();
+                await Clients.Caller.SendAsync("FeedbackGenerated", feedbackResult);
                 await Clients.Caller.SendAsync("InterviewEnded");
-                logger.LogInformation("Interview ended successfully");
+                logger.LogInformation("Interview ended successfully and feedback generated");
             }
             catch (Exception ex)
             {

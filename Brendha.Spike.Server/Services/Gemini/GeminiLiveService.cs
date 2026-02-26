@@ -1,5 +1,8 @@
-﻿using Brendha.Spike.Core.Models.DTOs.Gemini;
+﻿using Brendha.Spike.Core.Models;
+using Brendha.Spike.Core.Models.DTOs.Agents;
+using Brendha.Spike.Core.Models.DTOs.Gemini;
 using Brendha.Spike.Server.Hubs;
+using Brendha.Spike.Server.Interfaces.Agents;
 using Brendha.Spike.Server.Interfaces.Connection;
 using Brendha.Spike.Server.Interfaces.Helpers;
 using Brendha.Spike.Server.Interfaces.Logger;
@@ -7,6 +10,7 @@ using Brendha.Spike.Server.Interfaces.Processing;
 using Brendha.Spike.Server.Interfaces.Transport;
 using Brendha.Spike.Server.Services.Context;
 using Brendha.Spike.Server.Services.Data;
+using Brendha.Spike.Server.Services.Gemini.Agents;
 using Microsoft.AspNetCore.SignalR;
 using System.Diagnostics;
 using System.Net.WebSockets;
@@ -16,7 +20,6 @@ using System.Text.Json;
 namespace Brendha.Spike.Server.Services.Gemini
 {
     public class GeminiLiveService(
-        string apiKey,
         ILogger<GeminiLiveService> logger,
         IHubContext<InterviewHub> hubContext,
         IInterviewLogger interviewLogger,
@@ -24,12 +27,14 @@ namespace Brendha.Spike.Server.Services.Gemini
         IGeminiReconnectionManager reconnectionManager,
         IWebSocketClient webSocketClient,
         IGeminiMessageProcessor messageProcessor,
-        IGeminiSetupConfigBuilder setupConfigBuilder
+        IGeminiSetupConfigBuilder setupConfigBuilder,
+        IGeminiFeedbackAgent feedbackAgent,
+        IConfiguration configuration
         ) : IDisposable
     {
 
-        private const string GeminiUrl = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent";
-        private string _apiKey = apiKey;
+        private readonly string _geminiStreamingUrl = configuration["Gemini:StreamingUrl"];
+        private readonly string _apiKey = configuration["Gemini:ApiKey"]!;
         private readonly SemaphoreSlim _wsSemaphore = new(1, 1);
         private DateTime _sessionEndTime;
         private string _pendingResumeText;
@@ -42,6 +47,8 @@ namespace Brendha.Spike.Server.Services.Gemini
         private readonly object _receiveLoopLock = new();
         private readonly IWebSocketClient _webSocketClient = webSocketClient;
         private readonly IGeminiMessageProcessor _messageProcessor = messageProcessor;
+        private JobPosition _currentJob; 
+        
 
         public event Func<byte[], Task>? OnAudioReceived;
 
@@ -70,7 +77,7 @@ namespace Brendha.Spike.Server.Services.Gemini
                     return;
                 }
 
-                await _webSocketClient.ConnectAsync(new Uri($"{GeminiUrl}?key={_apiKey}"), CancellationToken.None);
+                await _webSocketClient.ConnectAsync(new Uri($"{_geminiStreamingUrl}?key={_apiKey}"), CancellationToken.None);
                 logger.LogInformation("WebSocket connected, initializing session...");
             }
             catch (Exception ex)
@@ -259,7 +266,7 @@ namespace Brendha.Spike.Server.Services.Gemini
             try { _wsSemaphore?.Dispose(); } catch { }
         }
 
-        public async Task DisconnectAsync()
+        public async Task<FeedbackResultDto> DisconnectAsync()
         {
             try
             {
@@ -285,11 +292,15 @@ namespace Brendha.Spike.Server.Services.Gemini
 
                 await interviewLogger.LogAsync("System", "Interview ended");
                 logger.LogInformation("Gemini connection closed successfully");
+
+                var feedback = await feedbackAgent.GenerateFeedbackAsync(interviewLogger.LogFilePath, _currentJob);
+                return feedback;
             }
 
             catch (Exception ex)
             {
                 logger.LogError($"Error closing Gemini connection: {ex.Message}");
+                return null;
             }
         }
         private async Task InitializeSessionAsync()
@@ -297,7 +308,7 @@ namespace Brendha.Spike.Server.Services.Gemini
             _sessionEndTime = DateTime.UtcNow.AddMinutes(10);
             await hubContext.Clients.All.SendAsync("SessionStarted", GetTimeRemaining());
 
-            var job = JobMockService.GetCurrentJob();
+            _currentJob = JobMockService.GetCurrentJob();
 
             var reconnectionContext = await contextManager.BuildReconnectionContextAsync();
             var hasContext = !string.IsNullOrWhiteSpace(reconnectionContext);
@@ -309,7 +320,7 @@ namespace Brendha.Spike.Server.Services.Gemini
             }
             else { logger.LogInformation("Starting fresh interview"); }
 
-            var config = setupConfigBuilder.Build(job, _currentResumeText, reconnectionContext);
+            var config = setupConfigBuilder.Build(_currentJob, _currentResumeText, reconnectionContext);
 
             var options = new JsonSerializerOptions
             {

@@ -12,6 +12,8 @@ namespace Brendha.Spike.Server.Infrastructure
         private readonly StringBuilder _memoryHistory = new();
         private readonly ILogger<InterviewFileLogger> _logger;
 
+        public string LogFilePath => _filePath;
+
         public InterviewFileLogger(ILogger<InterviewFileLogger> logger)
         {
             _logger = logger;
