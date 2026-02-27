@@ -10,7 +10,6 @@ using Brendha.Spike.Server.Interfaces.Processing;
 using Brendha.Spike.Server.Interfaces.Transport;
 using Brendha.Spike.Server.Services.Context;
 using Brendha.Spike.Server.Services.Data;
-using Brendha.Spike.Server.Services.Gemini.Agents;
 using Microsoft.AspNetCore.SignalR;
 using System.Diagnostics;
 using System.Net.WebSockets;
@@ -283,7 +282,6 @@ namespace Brendha.Spike.Server.Services.Gemini
                             CancellationToken.None);
                     }
 
-                    try { await _webSocketClient.DisposeAsync(); } catch { }
                 }
                 finally
                 {
@@ -294,6 +292,7 @@ namespace Brendha.Spike.Server.Services.Gemini
                 logger.LogInformation("Gemini connection closed successfully");
 
                 var feedback = await feedbackAgent.GenerateFeedbackAsync(interviewLogger.LogFilePath, _currentJob);
+                interviewLogger.FinalizeAndReset();
                 return feedback;
             }
 
@@ -398,8 +397,6 @@ namespace Brendha.Spike.Server.Services.Gemini
                     break;
                 }
             }
-
-            try { await _webSocketClient.DisposeAsync(); } catch { }
 
             logger.LogInformation("Receive loop ended");
         }

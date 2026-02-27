@@ -4,6 +4,7 @@
     {
         string LogFilePath { get; }
         Task LogAsync(string role, string message);
+        void FinalizeAndReset();
         string GetHistory();
     }
 }

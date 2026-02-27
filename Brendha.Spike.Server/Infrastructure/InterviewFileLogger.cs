@@ -62,12 +62,22 @@ namespace Brendha.Spike.Server.Infrastructure
             }
         }
 
+
         public string GetHistory()
         {
             lock (_memoryHistory)
             {
                 return _memoryHistory.ToString();
             }
+        }
+
+        public void FinalizeAndReset()
+        {
+            lock (_memoryHistory)
+            {
+                _memoryHistory.Clear();
+            }
+            _logger.LogInformation("Interview finalized and log history has been reset for the next session.");
         }
     }
 }

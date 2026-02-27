@@ -28,11 +28,11 @@ builder.Services.AddSingleton<IInterviewLogger, InterviewFileLogger>();
 builder.Services.AddSingleton<IGeminiReconnectionManager, GeminiReconnectionManager>();
 builder.Services.AddSingleton<IResumePdfAnalyzer, ImgAnalyzerPdfService>();
 builder.Services.AddSingleton<InterviewContextManager>();
-builder.Services.AddSingleton<IWebSocketClient, WebSocketClient>();
 builder.Services.AddSingleton<IGeminiMessageProcessor, GeminiMessageProcessor>();
 builder.Services.AddSingleton<IGeminiSetupConfigBuilder, GeminiSetupConfigBuilder>();
 builder.Services.AddSingleton<IGeminiFeedbackAgent, GeminiFeedbackAgent>();
 builder.Services.AddSingleton<IFeedbackGeminiClient, FeedbackGeminiClient>();
+builder.Services.AddSingleton<IWebSocketClient, WebSocketClient>();
 
 builder.Services.AddSingleton<GeminiLiveService>(sp =>
 {

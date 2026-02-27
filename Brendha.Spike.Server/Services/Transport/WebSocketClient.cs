@@ -7,7 +7,7 @@ namespace Brendha.Spike.Server.Services.Transport
     public class WebSocketClient : IWebSocketClient
     {
         private ClientWebSocket _ws = new();
-        private readonly SemaphoreSlim _sendSemaphore = new SemaphoreSlim(1, 1);
+        private SemaphoreSlim _sendSemaphore = new SemaphoreSlim(1, 1);
         private const int BufferSize = 64 * 1024;
 
         public WebSocketState? State => _ws?.State;
@@ -29,6 +29,11 @@ namespace Brendha.Spike.Server.Services.Transport
             catch { }
 
             _ws = new ClientWebSocket();
+            try
+            {
+                if (_sendSemaphore.Wait(0)) { _sendSemaphore.Release(); }
+            }
+            catch (ObjectDisposedException) { _sendSemaphore = new SemaphoreSlim(1, 1); }
             await _ws.ConnectAsync(uri, cancellationToken);
         }
 
@@ -42,14 +47,26 @@ namespace Brendha.Spike.Server.Services.Transport
         public async Task SendTextAsync(string text, CancellationToken cancellationToken = default)
         {
             var bytes = Encoding.UTF8.GetBytes(text);
-            await _sendSemaphore.WaitAsync(cancellationToken);
+            bool entered = false;
             try
             {
+                try
+                {
+                    await _sendSemaphore.WaitAsync(cancellationToken);
+                    entered = true;
+                }
+                catch (ObjectDisposedException)
+                {
+                    _sendSemaphore = new SemaphoreSlim(1, 1);
+                    await _sendSemaphore.WaitAsync(cancellationToken);
+                    entered = true;
+                }
                 await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
             }
             finally
             {
-                _sendSemaphore.Release();
+                if (entered)
+                    try { _sendSemaphore.Release(); } catch { }
             }
         }
 
