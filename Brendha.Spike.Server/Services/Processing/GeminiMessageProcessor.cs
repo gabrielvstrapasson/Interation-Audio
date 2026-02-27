@@ -18,7 +18,7 @@ namespace Brendha.Spike.Server.Services.Processing
         public event Func<JsonElement, Task>? OnToolCallReceived;
 
         private readonly StringBuilder _aiTextBuffer = new();
-        private string _lastUserText = string.Empty;
+        private readonly StringBuilder _userTextBuffer = new();
 
         public async Task ProcessAsync(string json)
         {
@@ -31,6 +31,11 @@ namespace Brendha.Spike.Server.Services.Processing
 
                 if (root.TryGetProperty("serverContent", out var serverContent))
                 {
+                    if (serverContent.TryGetProperty("modelTurn", out _))
+                    {
+                        await FlushUserBufferAsync();
+                    }
+
                     if (serverContent.TryGetProperty("modelTurn", out var modelTurn) &&
                         modelTurn.TryGetProperty("parts", out var parts))
                     {
@@ -81,7 +86,7 @@ namespace Brendha.Spike.Server.Services.Processing
                             var userText = userTextEl.GetString();
                             if (!string.IsNullOrEmpty(userText))
                             {
-                                _lastUserText = userText;
+                                _userTextBuffer.Append(userText);
                             }
                         }
                         else if (inputTrans.TryGetProperty("parts", out var inputParts))
@@ -94,13 +99,9 @@ namespace Brendha.Spike.Server.Services.Processing
                                     var txt = ptText.GetString();
                                     if (!string.IsNullOrWhiteSpace(txt))
                                     {
-                                        sb.Append(txt);
+                                        _userTextBuffer.Append(txt);
                                     }
                                 }
-                            }
-                            if (sb.Length > 0)
-                            {
-                                _lastUserText = sb.ToString();
                             }
                         }
                     }
@@ -154,23 +155,21 @@ namespace Brendha.Spike.Server.Services.Processing
 
         private async Task FlushUserBufferAsync()
         {
-            var fullUserText = _lastUserText.Trim();
+            var fullUserText = _userTextBuffer.ToString().Trim();
             if (fullUserText.Length > 0)
             {
 
                 if (fullUserText == "<noise>" || fullUserText == ".")
                 {
-                    _lastUserText = string.Empty;
                     return;
                 }
 
                 if (!string.IsNullOrWhiteSpace(fullUserText) && OnUserTextReceived != null)
                 {
-                    try { await OnUserTextReceived.Invoke(fullUserText); }
-                    catch (Exception ex) { logger.LogError(ex, "Error flushing user text buffer: " + ex.Message); }
+                    await OnUserTextReceived.Invoke(fullUserText);
                 }
 
-                _lastUserText = string.Empty;
+                _userTextBuffer.Clear();
             }
         }
 
