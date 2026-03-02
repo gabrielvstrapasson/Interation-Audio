@@ -31,6 +31,12 @@ namespace Brendha.Spike.Server.Services.Processing
 
                 if (root.TryGetProperty("serverContent", out var serverContent))
                 {
+                    if (serverContent.TryGetProperty("toolCall", out var toolCall) ||
+                        serverContent.TryGetProperty("tool_call", out toolCall))
+                    {
+                        await InvokeToolCall(toolCall);
+                    }
+
                     if (serverContent.TryGetProperty("modelTurn", out _))
                     {
                         await FlushUserBufferAsync();
@@ -41,6 +47,12 @@ namespace Brendha.Spike.Server.Services.Processing
                     {
                         foreach (var part in parts.EnumerateArray())
                         {
+                            if (part.TryGetProperty("toolCall", out var pToolCall) ||
+                            part.TryGetProperty("tool_call", out pToolCall))
+                            {
+                                await InvokeToolCall(pToolCall);
+                            }
+
                             if (part.TryGetProperty("inlineData", out var inlineData))
                             {
                                 if (inlineData.TryGetProperty("data", out var dataEl))
@@ -159,6 +171,8 @@ namespace Brendha.Spike.Server.Services.Processing
             if (fullUserText.Length > 0)
             {
 
+                _userTextBuffer.Clear();
+
                 if (fullUserText == "<noise>" || fullUserText == ".")
                 {
                     return;
@@ -188,6 +202,14 @@ namespace Brendha.Spike.Server.Services.Processing
                 }
 
                 _aiTextBuffer.Clear();
+            }
+        }
+        private async Task InvokeToolCall(JsonElement toolCall)
+        {
+            if (OnToolCallReceived != null)
+            {
+                try { await OnToolCallReceived.Invoke(toolCall); }
+                catch (Exception ex) { logger.LogError(ex, "Error invoking tool call: " + ex.Message); }
             }
         }
     }

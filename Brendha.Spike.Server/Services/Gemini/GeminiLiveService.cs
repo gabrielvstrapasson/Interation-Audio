@@ -46,8 +46,8 @@ namespace Brendha.Spike.Server.Services.Gemini
         private readonly object _receiveLoopLock = new();
         private readonly IWebSocketClient _webSocketClient = webSocketClient;
         private readonly IGeminiMessageProcessor _messageProcessor = messageProcessor;
-        private JobPosition _currentJob; 
-        
+        private JobPosition _currentJob;
+
 
         public event Func<byte[], Task>? OnAudioReceived;
 
@@ -161,6 +161,13 @@ namespace Brendha.Spike.Server.Services.Gemini
                 {
                     await interviewLogger.LogAsync("Brendha (AI): ", text);
                     logger.LogInformation($"Brendha(IA): {text}");
+
+                    if (text.Contains("[FINISH_INTERVIEW]"))
+                    {
+                        logger.LogInformation("Detected [FINISH_INTERVIEW] tag in AI response, ending session");
+                        await Task.Delay(2000);
+                        await DisconnectAsync();
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -172,7 +179,11 @@ namespace Brendha.Spike.Server.Services.Gemini
             {
                 try
                 {
-                    await hubContext.Clients.All.SendAsync("ReceiveAIQuestion", chunk);
+                    var cleanChunk = chunk.Replace("[FINISH_INTERVIEW]", "");
+                    if (!string.IsNullOrWhiteSpace(cleanChunk))
+                    {
+                        await hubContext.Clients.All.SendAsync("ReceiveAIQuestion", chunk);
+                    }
                 }
                 catch (Exception ex) { logger.LogError(ex, "Error sending AI text chunk to front"); }
             };
@@ -202,6 +213,27 @@ namespace Brendha.Spike.Server.Services.Gemini
                     logger.LogError(ex, "Error handling turn complete from message processor");
                 }
                 await Task.CompletedTask;
+            };
+
+            _messageProcessor.OnToolCallReceived += async (toolCallJson) =>
+            {
+                try
+                {
+                    if (toolCallJson.TryGetProperty("functionCalls", out var calls) ||
+                        toolCallJson.TryGetProperty("function_calls", out calls))
+                    {
+                        foreach (var call in calls.EnumerateArray())
+                        {
+                            if (call.GetProperty("name").GetString() == "finish_interview")
+                            {
+                                logger.LogInformation("Received finish_interview tool call from Gemini, ending session");
+                                await Task.Delay(500);
+                                await DisconnectAsync();
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex) { logger.LogError(ex, "Error to process Tool Call finish_interview"); }
             };
         }
 
@@ -248,7 +280,11 @@ namespace Brendha.Spike.Server.Services.Gemini
                 new MediaChunk("audio/pcm", Convert.ToBase64String(audioData))
             }));
 
-            if (!_aiIsSpeaking) { _latencyWatch.Restart(); _isWaitingForFirstResponse = true; }
+            if (!_aiIsSpeaking && !_isWaitingForFirstResponse)
+            {
+                _latencyWatch.Restart();
+                _isWaitingForFirstResponse = true;
+            }
             await SendJsonAsync(JsonSerializer.Serialize(payload));
         }
         public double GetTimeRemaining()
@@ -289,9 +325,13 @@ namespace Brendha.Spike.Server.Services.Gemini
                 }
 
                 await interviewLogger.LogAsync("System", "Interview ended");
-                logger.LogInformation("Gemini connection closed successfully");
 
                 var feedback = await feedbackAgent.GenerateFeedbackAsync(interviewLogger.LogFilePath, _currentJob);
+
+                await hubContext.Clients.All.SendAsync("FeedbackGenerated", feedback);
+                await hubContext.Clients.All.SendAsync("InterviewEnded");
+                logger.LogInformation("Interview ended successfully and feedback generated");
+
                 interviewLogger.FinalizeAndReset();
                 return feedback;
             }

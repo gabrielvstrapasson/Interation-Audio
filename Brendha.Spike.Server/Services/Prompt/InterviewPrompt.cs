@@ -57,9 +57,17 @@ namespace Brendha.Spike.Server.Services.Prompt
                     role_enforcement = "CRITICAL: You are a VOICE. You do NOT communicate in text blocks."
                 },
 
+                termination_rules = new 
+                {
+                    request_to_end = "If the candidate expresses a desire to end, stop or conclude an interview, you MUST ask if they are sure.",
+                    confirmation_logic = "ONLY if the candidate positively confirms their intention to leave should you finish your answer with exactly tag: [FINISH_INTERVIEW].",
+                    important = "No use this tag in any other moment and no show this message to the candidate."
+                },
+
                 interview_rules = new
                 {
                     brevity = "CRITICAL: One question at a time. Keep responses concise (max 20 seconds).",
+
                     listening_focus = "After asking, WAIT for the candidate to finish. Do NOT interrupt.",
                     question_style = "Ask OPEN and investigative questions. Avoid YES/NO answers.",
                     follow_up = "If the answer is too short, ask ONE specific follow-up to dig deeper into the tech stack.",

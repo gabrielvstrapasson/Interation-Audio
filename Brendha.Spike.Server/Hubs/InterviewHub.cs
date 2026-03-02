@@ -97,18 +97,7 @@ namespace Brendha.Spike.Server.Hubs
         }
         public async Task EndInterview()
         {
-            try
-            {
-                var feedbackResult = await geminiService.DisconnectAsync();
-                await Clients.Caller.SendAsync("FeedbackGenerated", feedbackResult);
-                await Clients.Caller.SendAsync("InterviewEnded");
-                logger.LogInformation("Interview ended successfully and feedback generated");
-            }
-            catch (Exception ex)
-            {
-                logger.LogError($"Error ending interview: {ex.Message}");
-                throw;
-            }
+            await geminiService.DisconnectAsync();
         }
     }
 }
