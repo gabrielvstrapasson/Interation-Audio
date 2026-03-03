@@ -1,6 +1,6 @@
 ﻿namespace Brendha.Spike.Server.Interfaces.Logger
 {
-    public interface IInterviewLogger
+    public interface IInterviewFileLogger
     {
         string LogFilePath { get; }
         Task LogAsync(string role, string message);

@@ -1,12 +1,9 @@
 ﻿using Brendha.Spike.Server.Interfaces.Logger;
-using Microsoft.AspNetCore.Components.Web;
-using System.Runtime.CompilerServices;
 using System.Text;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace Brendha.Spike.Server.Infrastructure
 {
-    public class InterviewFileLogger : IInterviewLogger
+    public class InterviewFileLogger : IInterviewFileLogger
     {
         private readonly string _filePath;
         private readonly StringBuilder _memoryHistory = new();

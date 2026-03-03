@@ -2,6 +2,7 @@ using Brendha.Spike.Server.Hubs;
 using Brendha.Spike.Server.Infrastructure;
 using Brendha.Spike.Server.Interfaces.Agents;
 using Brendha.Spike.Server.Interfaces.Connection;
+using Brendha.Spike.Server.Interfaces.Context;
 using Brendha.Spike.Server.Interfaces.Helpers;
 using Brendha.Spike.Server.Interfaces.Logger;
 using Brendha.Spike.Server.Interfaces.Processing;
@@ -23,37 +24,21 @@ using System.Text.Json;
 Env.Load();
 var builder = WebApplication.CreateBuilder(args);
 
+
 builder.Services.AddSingleton<AudioStreamBuffer>();
-builder.Services.AddSingleton<IInterviewLogger, InterviewFileLogger>();
-builder.Services.AddSingleton<IGeminiReconnectionManager, GeminiReconnectionManager>();
 builder.Services.AddSingleton<IResumePdfAnalyzer, ImgAnalyzerPdfService>();
-builder.Services.AddSingleton<InterviewContextManager>();
-builder.Services.AddSingleton<IGeminiMessageProcessor, GeminiMessageProcessor>();
 builder.Services.AddSingleton<IGeminiSetupConfigBuilder, GeminiSetupConfigBuilder>();
 builder.Services.AddSingleton<IGeminiFeedbackAgent, GeminiFeedbackAgent>();
 builder.Services.AddSingleton<IFeedbackGeminiClient, FeedbackGeminiClient>();
-builder.Services.AddSingleton<IWebSocketClient, WebSocketClient>();
+builder.Services.AddSingleton<InterviewSessionManager>();
 
-builder.Services.AddSingleton<GeminiLiveService>(sp =>
-{
-    var config = sp.GetRequiredService<IConfiguration>();
-    var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? config["Gemini:ApiKey"];
-
-    if (string.IsNullOrEmpty(apiKey)) throw new Exception("API Key is not configured.");
-
-    return new GeminiLiveService(
-        sp.GetRequiredService<ILogger<GeminiLiveService>>(),
-        sp.GetRequiredService<IHubContext<InterviewHub>>(),
-        sp.GetRequiredService<IInterviewLogger>(),
-        sp.GetRequiredService<InterviewContextManager>(),
-        sp.GetRequiredService<IGeminiReconnectionManager>(),
-        sp.GetRequiredService<IWebSocketClient>(),
-        sp.GetRequiredService<IGeminiMessageProcessor>(),
-        sp.GetRequiredService<IGeminiSetupConfigBuilder>(),
-        sp.GetRequiredService<IGeminiFeedbackAgent>(),
-        sp.GetRequiredService<IConfiguration>()
-    );
-});
+builder.Services.AddTransient<IWebSocketClient, WebSocketClient>();
+builder.Services.AddTransient<IGeminiReconnectionManager, GeminiReconnectionManager>();
+builder.Services.AddTransient<IInterviewFileLogger, InterviewFileLogger>();
+builder.Services.AddTransient<IGeminiConnectionManager, GeminiConnectionManager>();
+builder.Services.AddTransient<IInterviewContextManager, InterviewContextManager>();
+builder.Services.AddTransient<IGeminiMessageProcessor, GeminiMessageProcessor>();
+builder.Services.AddTransient<InterviewOrchestratorService>();
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>

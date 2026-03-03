@@ -1,10 +1,11 @@
-﻿using Brendha.Spike.Server.Interfaces.Logger;
+﻿using Brendha.Spike.Server.Interfaces.Context;
+using Brendha.Spike.Server.Interfaces.Logger;
 
 namespace Brendha.Spike.Server.Services.Context
 {
     public class InterviewContextManager(
         ILogger<InterviewContextManager> logger,
-        IInterviewLogger interviewLogger) : IDisposable
+        IInterviewFileLogger interviewLogger) : IInterviewContextManager
     {
         private const int MAX_CONTEXT_LENGTH = 4000;
         private const int MAX_RECENT_LINES = 20;

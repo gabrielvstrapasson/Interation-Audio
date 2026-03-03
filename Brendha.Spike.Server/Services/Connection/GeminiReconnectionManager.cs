@@ -8,13 +8,17 @@ namespace Brendha.Spike.Server.Services.Connection
 {
     public class GeminiReconnectionManager(
         ILogger<IGeminiReconnectionManager> logger,
-        IInterviewLogger interviewLogger,
+        IInterviewFileLogger interviewLogger,
         IHubContext<InterviewHub> hubContext) : IGeminiReconnectionManager
     {
         private const int MAX_RECONNECTION_ATTEMPTS = 3;
         private const int BASE_DELAY_SECONDS = 2;
 
         private int _currentAttempt = 0;
+
+        public event Func<ReconnectionAttemptArgs, Task>? OnReconnectionAttempt;
+        public event Func<Task>? OnReconnectionSuccess;
+        public event Func<ReconnectionFailedArgs, Task>? OnReconnectionFailed;
 
         public void Reset()
         {
@@ -53,11 +57,11 @@ namespace Brendha.Spike.Server.Services.Connection
                     logger.LogInformation($"Reconnection attempt {attempt}/{MAX_RECONNECTION_ATTEMPTS}");
                     await interviewLogger.LogAsync("System", $"Trying to reconnect ({attempt}/{MAX_RECONNECTION_ATTEMPTS})");
 
-                    await hubContext.Clients.All.SendAsync("ReconnectionAttempt", new
+                    if (OnReconnectionAttempt != null)
                     {
-                        attempt,
-                        maxAttempt = MAX_RECONNECTION_ATTEMPTS
-                    }, cancellationToken);
+                        await OnReconnectionAttempt.Invoke(new ReconnectionAttemptArgs(attempt, MAX_RECONNECTION_ATTEMPTS));
+                    }
+
                     var delaySeconds = (int)Math.Pow(BASE_DELAY_SECONDS, attempt);
                     await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
 
@@ -65,11 +69,10 @@ namespace Brendha.Spike.Server.Services.Connection
                     logger.LogInformation($"Reconnection successful on attempt {attempt}.");
                     await interviewLogger.LogAsync("System", "Reconnection successful.");
 
-                    await hubContext.Clients.All.SendAsync("ReconnectionSuccess", new
+                   if (OnReconnectionSuccess != null)
                     {
-                        attempt,
-                        message = "Reconnection successful!"
-                    }, cancellationToken);
+                        await OnReconnectionSuccess.Invoke();
+                    }
 
                     Reset();
                     return true;
@@ -84,12 +87,10 @@ namespace Brendha.Spike.Server.Services.Connection
                         logger.LogError("All reconnection attempts failed");
                         await interviewLogger.LogAsync("System", "Fail to reconnect after multiple attempts");
 
-                        await hubContext.Clients.All.SendAsync("ReconnectionFailed", new
+                       if (OnReconnectionFailed != null)
                         {
-                            attempts = MAX_RECONNECTION_ATTEMPTS,
-                            lastError = ex.Message,
-                            message = "Failed to reconnect, please restart the interview."
-                        }, cancellationToken);
+                            await OnReconnectionFailed.Invoke(new ReconnectionFailedArgs(MAX_RECONNECTION_ATTEMPTS, ex.Message, "Failed to reconnect, please restart the interview."));
+                        }
                     }
                 }
             }
