@@ -1,4 +1,4 @@
-﻿namespace Brendha.Spike.Server.Interfaces.Resume
+﻿namespace Brendha.Interview.Server.Interfaces.Resume
 {
     public interface IResumePdfAnalyzer
     {

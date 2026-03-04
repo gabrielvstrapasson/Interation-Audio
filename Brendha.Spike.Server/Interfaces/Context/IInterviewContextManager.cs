@@ -1,4 +1,4 @@
-﻿namespace Brendha.Spike.Server.Interfaces.Context
+﻿namespace Brendha.Interview.Server.Interfaces.Context
 {
     public interface IInterviewContextManager : IDisposable
     {

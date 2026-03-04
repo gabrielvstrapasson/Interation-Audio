@@ -1,6 +1,6 @@
-﻿using Brendha.Spike.Server.Interfaces.Logger;
+﻿using Brendha.Interview.Server.Interfaces.Logger;
 
-namespace Brendha.Spike.Server.Infrastructure
+namespace Brendha.Interview.Server.Infrastructure
 {
     public class InterviewLoggerFactory (ILoggerFactory loggerFactory): IInterviewLoggerFactory
     {

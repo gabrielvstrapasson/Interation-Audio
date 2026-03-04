@@ -1,9 +1,9 @@
-﻿using Brendha.Spike.Server.Hubs;
-using Brendha.Spike.Server.Infrastructure;
-using Brendha.Spike.Server.Services.Gemini;
+﻿using Brendha.Interview.Server.Hubs;
+using Brendha.Interview.Server.Infrastructure;
+using Brendha.Interview.Server.Services.Gemini;
 using Microsoft.AspNetCore.SignalR;
 
-namespace Brendha.Spike.Server.Workers
+namespace Brendha.Interview.Server.Workers
 {
     public class AudioProcessorWorker(ILogger<AudioProcessorWorker> logger,
                                       AudioStreamBuffer buffer,

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 
-namespace Brendha.Spike.Core.Models.State
+namespace Brendha.Interview.Core.Models.State
 {
     public class InterviewSessionState
     {

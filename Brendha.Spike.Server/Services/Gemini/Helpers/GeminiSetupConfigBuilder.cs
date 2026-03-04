@@ -1,10 +1,10 @@
-﻿using Brendha.Spike.Core.Models;
-using Brendha.Spike.Core.Models.DTOs.Gemini;
-using Brendha.Spike.Server.Interfaces.Helpers;
-using Brendha.Spike.Server.Services.Prompt;
-using Brendha.Spike.Server.Shared;
+﻿using Brendha.Interview.Core.Models;
+using Brendha.Interview.Core.Models.DTOs.Gemini;
+using Brendha.Interview.Server.Interfaces.Helpers;
+using Brendha.Interview.Server.Services.Prompt;
+using Brendha.Interview.Server.Shared;
 
-namespace Brendha.Spike.Server.Services.Gemini.Helpers
+namespace Brendha.Interview.Server.Services.Gemini.Helpers
 {
     public class GeminiSetupConfigBuilder : IGeminiSetupConfigBuilder
     {

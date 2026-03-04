@@ -1,9 +1,9 @@
-﻿using Brendha.Spike.Core.Models.DTOs.Agents;
-using Brendha.Spike.Server.Interfaces.Agents;
+﻿using Brendha.Interview.Core.Models.DTOs.Agents;
+using Brendha.Interview.Server.Interfaces.Agents;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Brendha.Spike.Server.Controllers
+namespace Brendha.Interview.Server.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]

@@ -1,4 +1,4 @@
-﻿namespace Brendha.Spike.Server.Shared
+﻿namespace Brendha.Interview.Server.Shared
 {
     public class GeminiToolNames
     {

@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace Brendha.Spike.Core.Models.DTOs.Agents
+namespace Brendha.Interview.Core.Models.DTOs.Agents
 {
     public class FeedbackRequestDto
     {

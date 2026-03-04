@@ -1,6 +1,6 @@
 ﻿using System.Text.Json;
 
-namespace Brendha.Spike.Server.Interfaces.Processing
+namespace Brendha.Interview.Server.Interfaces.Processing
 {
     public interface IGeminiMessageProcessor
     {

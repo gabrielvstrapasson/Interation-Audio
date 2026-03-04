@@ -1,7 +1,7 @@
-﻿using Brendha.Spike.Core.Models;
-using Brendha.Spike.Core.Models.DTOs.Gemini;
+﻿using Brendha.Interview.Core.Models;
+using Brendha.Interview.Core.Models.DTOs.Gemini;
 
-namespace Brendha.Spike.Server.Interfaces.Helpers
+namespace Brendha.Interview.Server.Interfaces.Helpers
 {
     public interface IGeminiSetupConfigBuilder
     {

@@ -1,8 +1,8 @@
-﻿using Brendha.Spike.Server.Interfaces.Transport;
+﻿using Brendha.Interview.Server.Interfaces.Transport;
 using System.Net.WebSockets;
 using System.Text;
 
-namespace Brendha.Spike.Server.Services.Transport
+namespace Brendha.Interview.Server.Services.Transport
 {
     public class WebSocketClient : IWebSocketClient
     {

@@ -1,6 +1,6 @@
 ﻿using System.Net.WebSockets;
 
-namespace Brendha.Spike.Server.Interfaces.Transport
+namespace Brendha.Interview.Server.Interfaces.Transport
 {
     public interface IWebSocketClient : IAsyncDisposable
     {

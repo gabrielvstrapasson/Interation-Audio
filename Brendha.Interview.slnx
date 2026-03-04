@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Brendha.Spike.Core/Brendha.Interview.Core.csproj" />
+  <Project Path="Brendha.Spike.Server/Brendha.Interview.Server.csproj" />
+</Solution>

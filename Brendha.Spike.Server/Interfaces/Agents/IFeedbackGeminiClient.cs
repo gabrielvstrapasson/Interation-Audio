@@ -1,4 +1,4 @@
-﻿namespace Brendha.Spike.Server.Interfaces.Agents
+﻿namespace Brendha.Interview.Server.Interfaces.Agents
 {
     public interface IFeedbackGeminiClient 
     {

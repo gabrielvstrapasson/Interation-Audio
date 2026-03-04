@@ -1,10 +1,10 @@
-﻿using Brendha.Spike.Server.Interfaces.Connection;
-using Brendha.Spike.Server.Interfaces.Transport;
-using Brendha.Spike.Server.Services.Gemini;
+﻿using Brendha.Interview.Server.Interfaces.Connection;
+using Brendha.Interview.Server.Interfaces.Transport;
+using Brendha.Interview.Server.Services.Gemini;
 using System.Net.WebSockets;
 using System.Text;
 
-namespace Brendha.Spike.Server.Services.Connection
+namespace Brendha.Interview.Server.Services.Connection
 {
     public class GeminiConnectionManager(
         ILogger<GeminiConnectionManager> logger,

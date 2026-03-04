@@ -1,11 +1,11 @@
-﻿using Brendha.Spike.Core.Models;
-using Brendha.Spike.Core.Models.DTOs.Agents;
-using Brendha.Spike.Server.Infrastructure;
-using Brendha.Spike.Server.Interfaces.Connection;
-using Brendha.Spike.Server.Services.Gemini;
+﻿using Brendha.Interview.Core.Models;
+using Brendha.Interview.Core.Models.DTOs.Agents;
+using Brendha.Interview.Server.Infrastructure;
+using Brendha.Interview.Server.Interfaces.Connection;
+using Brendha.Interview.Server.Services.Gemini;
 using Microsoft.AspNetCore.SignalR;
 
-namespace Brendha.Spike.Server.Hubs
+namespace Brendha.Interview.Server.Hubs
 {
     public class InterviewHub(
         AudioStreamBuffer buffer,

@@ -1,8 +1,8 @@
-﻿using Brendha.Spike.Server.Services.Resume;
+﻿using Brendha.Interview.Server.Services.Resume;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Brendha.Spike.Server.Controllers
+namespace Brendha.Interview.Server.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]

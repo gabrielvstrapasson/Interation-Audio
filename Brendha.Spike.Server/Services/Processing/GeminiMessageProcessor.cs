@@ -1,9 +1,9 @@
-﻿using Brendha.Spike.Server.Interfaces.Processing;
+﻿using Brendha.Interview.Server.Interfaces.Processing;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace Brendha.Spike.Server.Services.Processing
+namespace Brendha.Interview.Server.Services.Processing
 {
     public class GeminiMessageProcessor(
         ILogger<GeminiMessageProcessor> logger) : IGeminiMessageProcessor

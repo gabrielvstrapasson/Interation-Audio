@@ -1,10 +1,10 @@
-﻿using Brendha.Spike.Server.Hubs;
-using Brendha.Spike.Server.Interfaces.Connection;
-using Brendha.Spike.Server.Interfaces.Logger;
+﻿using Brendha.Interview.Server.Hubs;
+using Brendha.Interview.Server.Interfaces.Connection;
+using Brendha.Interview.Server.Interfaces.Logger;
 using Microsoft.AspNetCore.SignalR;
 using System.Net.WebSockets;
 
-namespace Brendha.Spike.Server.Services.Connection
+namespace Brendha.Interview.Server.Services.Connection
 {
     public class GeminiReconnectionManager(ILogger<IGeminiReconnectionManager> logger) : IGeminiReconnectionManager
     {

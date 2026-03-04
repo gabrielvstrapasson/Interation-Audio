@@ -1,8 +1,8 @@
-﻿using Brendha.Spike.Server.Hubs;
+﻿using Brendha.Interview.Server.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using System.Collections.Concurrent;
 
-namespace Brendha.Spike.Server.Services.Gemini
+namespace Brendha.Interview.Server.Services.Gemini
 {
     public class InterviewSessionManager(
         IServiceProvider serviceProvider,

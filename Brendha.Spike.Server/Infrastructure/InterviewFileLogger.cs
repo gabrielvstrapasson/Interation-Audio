@@ -1,7 +1,7 @@
-﻿using Brendha.Spike.Server.Interfaces.Logger;
+﻿using Brendha.Interview.Server.Interfaces.Logger;
 using System.Text;
 
-namespace Brendha.Spike.Server.Infrastructure
+namespace Brendha.Interview.Server.Infrastructure
 {
     public class InterviewFileLogger : IInterviewFileLogger
     {

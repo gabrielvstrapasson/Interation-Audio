@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace Brendha.Spike.Core.Models.External
+namespace Brendha.Interview.Core.Models.External
 {
     public class BrendhaGatewayModels
     {

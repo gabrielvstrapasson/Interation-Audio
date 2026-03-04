@@ -1,11 +1,11 @@
-﻿using Brendha.Spike.Core.Models;
-using Brendha.Spike.Core.Models.DTOs.Agents;
-using Brendha.Spike.Server.Interfaces.Agents;
-using Brendha.Spike.Server.Services.Prompt;
+﻿using Brendha.Interview.Core.Models;
+using Brendha.Interview.Core.Models.DTOs.Agents;
+using Brendha.Interview.Server.Interfaces.Agents;
+using Brendha.Interview.Server.Services.Prompt;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 
-namespace Brendha.Spike.Server.Services.Gemini.Agents
+namespace Brendha.Interview.Server.Services.Gemini.Agents
 {
     public class GeminiFeedbackAgent(IFeedbackGeminiClient geminiClient) : IGeminiFeedbackAgent
     {

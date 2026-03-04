@@ -1,10 +1,10 @@
-﻿using Brendha.Spike.Core.Models;
-using Brendha.Spike.Server.Services.Data;
+﻿using Brendha.Interview.Core.Models;
+using Brendha.Interview.Server.Services.Data;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Cryptography.X509Certificates;
 
-namespace Brendha.Spike.Server.Controllers
+namespace Brendha.Interview.Server.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]

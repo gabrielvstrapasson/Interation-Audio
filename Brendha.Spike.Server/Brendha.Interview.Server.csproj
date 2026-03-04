@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-	  <ProjectReference Include="..\Brendha.Spike.Core\Brendha.Spike.Core.csproj" />
+	  <ProjectReference Include="..\Brendha.Spike.Core\Brendha.Interview.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

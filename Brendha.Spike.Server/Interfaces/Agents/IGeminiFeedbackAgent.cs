@@ -1,7 +1,7 @@
-﻿using Brendha.Spike.Core.Models;
-using Brendha.Spike.Core.Models.DTOs.Agents;
+﻿using Brendha.Interview.Core.Models;
+using Brendha.Interview.Core.Models.DTOs.Agents;
 
-namespace Brendha.Spike.Server.Interfaces.Agents
+namespace Brendha.Interview.Server.Interfaces.Agents
 {
     public interface IGeminiFeedbackAgent
     {

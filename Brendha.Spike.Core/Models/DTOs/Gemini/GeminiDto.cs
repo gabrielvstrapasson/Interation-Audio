@@ -4,7 +4,7 @@ using System.ComponentModel;
 using System.Text;
 using System.Text.Json.Serialization;
 
-namespace Brendha.Spike.Core.Models.DTOs.Gemini
+namespace Brendha.Interview.Core.Models.DTOs.Gemini
 {
     public record GeminiSetupRequest(GeminiSetup setup);
     public record GeminiSetup(

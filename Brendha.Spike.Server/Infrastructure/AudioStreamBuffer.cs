@@ -1,7 +1,7 @@
-﻿using Brendha.Spike.Core.Models;
+﻿using Brendha.Interview.Core.Models;
 using System.Threading.Channels;
 
-namespace Brendha.Spike.Server.Infrastructure
+namespace Brendha.Interview.Server.Infrastructure
 {
     public class AudioStreamBuffer
     {

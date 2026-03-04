@@ -1,7 +1,7 @@
-﻿using Brendha.Spike.Server.Interfaces.Context;
-using Brendha.Spike.Server.Interfaces.Logger;
+﻿using Brendha.Interview.Server.Interfaces.Context;
+using Brendha.Interview.Server.Interfaces.Logger;
 
-namespace Brendha.Spike.Server.Services.Context
+namespace Brendha.Interview.Server.Services.Context
 {
     public class InterviewContextManager(
         ILogger<InterviewContextManager> logger) : IInterviewContextManager

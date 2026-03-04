@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace Brendha.Spike.Core.Models
+namespace Brendha.Interview.Core.Models
 {
     public class AudioPacket
     {

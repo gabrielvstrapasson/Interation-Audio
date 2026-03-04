@@ -1,6 +1,6 @@
 ﻿using System.Net.WebSockets;
 
-namespace Brendha.Spike.Server.Interfaces.Connection
+namespace Brendha.Interview.Server.Interfaces.Connection
 {
     public record ReconnectionAttemptArgs(int Attempt, int MaxAttempts);
     public record ReconnectionFailedArgs(int Attempts, string LastError, string Message);

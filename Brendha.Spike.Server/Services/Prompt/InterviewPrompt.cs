@@ -1,7 +1,7 @@
-﻿using Brendha.Spike.Core.Models;
+﻿using Brendha.Interview.Core.Models;
 using System.Text.Json;
 
-namespace Brendha.Spike.Server.Services.Prompt
+namespace Brendha.Interview.Server.Services.Prompt
 {
     public class InterviewPrompt
     {

@@ -1,7 +1,7 @@
-﻿using Brendha.Spike.Core.Models;
+﻿using Brendha.Interview.Core.Models;
 using System.Runtime.CompilerServices;
 
-namespace Brendha.Spike.Server.Services.Data
+namespace Brendha.Interview.Server.Services.Data
 {
     public class JobMockService
     {

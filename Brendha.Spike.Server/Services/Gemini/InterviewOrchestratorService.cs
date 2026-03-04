@@ -1,24 +1,24 @@
-﻿using Brendha.Spike.Core.Models;
-using Brendha.Spike.Core.Models.DTOs.Agents;
-using Brendha.Spike.Core.Models.DTOs.Gemini;
-using Brendha.Spike.Core.Models.State;
-using Brendha.Spike.Server.Hubs;
-using Brendha.Spike.Server.Interfaces.Agents;
-using Brendha.Spike.Server.Interfaces.Connection;
-using Brendha.Spike.Server.Interfaces.Context;
-using Brendha.Spike.Server.Interfaces.Helpers;
-using Brendha.Spike.Server.Interfaces.Logger;
-using Brendha.Spike.Server.Interfaces.Processing;
-using Brendha.Spike.Server.Interfaces.Transport;
-using Brendha.Spike.Server.Services.Context;
-using Brendha.Spike.Server.Services.Data;
+﻿using Brendha.Interview.Core.Models;
+using Brendha.Interview.Core.Models.DTOs.Agents;
+using Brendha.Interview.Core.Models.DTOs.Gemini;
+using Brendha.Interview.Core.Models.State;
+using Brendha.Interview.Server.Hubs;
+using Brendha.Interview.Server.Interfaces.Agents;
+using Brendha.Interview.Server.Interfaces.Connection;
+using Brendha.Interview.Server.Interfaces.Context;
+using Brendha.Interview.Server.Interfaces.Helpers;
+using Brendha.Interview.Server.Interfaces.Logger;
+using Brendha.Interview.Server.Interfaces.Processing;
+using Brendha.Interview.Server.Interfaces.Transport;
+using Brendha.Interview.Server.Services.Context;
+using Brendha.Interview.Server.Services.Data;
 using Microsoft.AspNetCore.SignalR;
 using System.Diagnostics;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 
-namespace Brendha.Spike.Server.Services.Gemini
+namespace Brendha.Interview.Server.Services.Gemini
 {
     public class InterviewOrchestratorService(
         ILogger<InterviewOrchestratorService> logger,

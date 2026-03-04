@@ -1,8 +1,8 @@
-﻿using Brendha.Spike.Server.Interfaces.Agents;
+﻿using Brendha.Interview.Server.Interfaces.Agents;
 using System.Text;
 using System.Text.Json;
 
-namespace Brendha.Spike.Server.Services.Gemini.Agents
+namespace Brendha.Interview.Server.Services.Gemini.Agents
 {
     public class FeedbackGeminiClient(
         HttpClient httpClient,

@@ -1,8 +1,8 @@
-﻿using Brendha.Spike.Server.Interfaces.Resume;
+﻿using Brendha.Interview.Server.Interfaces.Resume;
 using System.Net.Http.Headers;
 using System.Text.Json;
 
-namespace Brendha.Spike.Server.Services.Resume
+namespace Brendha.Interview.Server.Services.Resume
 {
     public class ResumeProcessingService (
         ILogger<ResumeProcessingService> logger,
