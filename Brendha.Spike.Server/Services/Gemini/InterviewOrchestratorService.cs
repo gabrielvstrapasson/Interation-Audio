@@ -23,25 +23,22 @@ namespace Brendha.Spike.Server.Services.Gemini
     public class InterviewOrchestratorService(
         ILogger<InterviewOrchestratorService> logger,
         IHubContext<InterviewHub> hubContext,
-        IInterviewFileLogger interviewLogger,
+        IInterviewLoggerFactory interviewLoggerFactory,
         IInterviewContextManager contextManager,
         IGeminiConnectionManager connectionManager,
         IGeminiReconnectionManager reconnectionManager,
         IGeminiMessageProcessor messageProcessor,
         IGeminiSetupConfigBuilder setupConfigBuilder,
-        IGeminiFeedbackAgent feedbackAgent,
-        IInterviewFileLogger interviewFileLogger,
-        IInterviewLoggerFactory interviewLoggerFactory
+        IGeminiFeedbackAgent feedbackAgent
         ) : IDisposable
     {
-
         private readonly InterviewSessionState _sessionState = new();
+        private IInterviewFileLogger _interviewFileLogger = null!;
         private bool _isDisposed = false;
         private bool _handlersAttached = false;
 
         private readonly ILogger<InterviewOrchestratorService> _logger = logger;
         private readonly IHubContext<InterviewHub> _hubContext = hubContext;
-        private readonly IInterviewFileLogger _interviewLogger = interviewLogger;
         private readonly IInterviewContextManager _contextManager = contextManager;
         private readonly IGeminiConnectionManager _connectionManager = connectionManager;
         private readonly IGeminiReconnectionManager _reconnectionManager = reconnectionManager;
@@ -62,8 +59,12 @@ namespace Brendha.Spike.Server.Services.Gemini
 
         public bool IsConnected => connectionManager.IsConnected;
         public bool HasResume => !string.IsNullOrWhiteSpace(_sessionState.PendingResumeText) || !string.IsNullOrWhiteSpace(_sessionState.CurrentResumeText);
-       
-        public void Initialize(string connectionId) { interviewFileLogger = interviewLoggerFactory.Create(connectionId); }
+
+        public void Initialize(string connectionId)
+        {
+            _interviewFileLogger = interviewLoggerFactory.Create(connectionId);
+            _logger.LogInformation("InterviewOrchestratorService initialized for connection {connectionId}", connectionId);
+        }
         public async Task ConnectAsync()
         {
             AttachHandlersOnce();
@@ -119,7 +120,7 @@ namespace Brendha.Spike.Server.Services.Gemini
                 OnResumeReceived?.Invoke(new { success = false, error = "Invalid format" });
             }
         }
-        public async Task LogSystemMessage(string text) => await _interviewLogger.LogAsync("System:", text);
+        public async Task LogSystemMessage(string text) => await _interviewFileLogger.LogAsync("System:", text);
         public async Task SendAudioChunkAsync(byte[] audioData)
         {
             if (!_connectionManager.IsConnected) return;
@@ -148,15 +149,15 @@ namespace Brendha.Spike.Server.Services.Gemini
                 _logger.LogInformation("Closing Gemini Connection");
 
                 await _connectionManager.DisconnectAsync();
-                await _interviewLogger.LogAsync("System", "Interview ended");
+                await _interviewFileLogger.LogAsync("System", "Interview ended");
 
-                var feedback = await _feedbackAgent.GenerateFeedbackAsync(_interviewLogger.LogFilePath, _sessionState.CurrentJob);
+                var feedback = await _feedbackAgent.GenerateFeedbackAsync(_interviewFileLogger.LogFilePath, _sessionState.CurrentJob);
 
                 OnFeedbackGenerated?.Invoke(feedback);
                 OnInterviewEnded?.Invoke();
                 _logger.LogInformation("Interview ended successfully and feedback generated");
 
-                _interviewLogger.FinalizeAndReset();
+                _interviewFileLogger.FinalizeAndReset();
                 return feedback;
             }
 
@@ -172,12 +173,13 @@ namespace Brendha.Spike.Server.Services.Gemini
             OnSessionStarted.Invoke(GetTimeRemaining());
 
             _sessionState.CurrentJob = JobMockService.GetCurrentJob();
-            var reconnectionContext = await contextManager.BuildReconnectionContextAsync();
+            var history = _interviewFileLogger.GetHistory();
+            var reconnectionContext = await contextManager.BuildReconnectionContextAsync(history);
 
             if (!string.IsNullOrWhiteSpace(reconnectionContext))
             {
                 _logger.LogInformation($"Reconnection with context recovery from history");
-                await _interviewLogger.LogAsync("System", "Reconnection with context recovery from history");
+                await _interviewFileLogger.LogAsync("System", "Reconnection with context recovery from history");
             }
             else { _logger.LogInformation("Starting fresh interview"); }
 
@@ -200,9 +202,10 @@ namespace Brendha.Spike.Server.Services.Gemini
 
             _connectionManager.OnMessageReceived += HandleMessageReceived;
             _connectionManager.OnConnectionClosed += HandleConnectionClosed;
-            _reconnectionManager.OnReconnectionAttempt += (args) => OnReconnectionAttempt?.Invoke(args) ?? Task.CompletedTask;
-            _reconnectionManager.OnReconnectionSuccess += () => OnReconnectionSuccess?.Invoke() ?? Task.CompletedTask;
-            _reconnectionManager.OnReconnectionFailed += (args) => OnReconnectionFailed?.Invoke(args) ?? Task.CompletedTask;
+
+            _reconnectionManager.OnReconnectionAttempt += HandleReconnectionAttempt;
+            _reconnectionManager.OnReconnectionSuccess += HandleReconnetionSuccess;
+            _reconnectionManager.OnReconnectionFailed += HandleReconnectionFailed;
             _messageProcessor.OnAudioReceived += HandleAudioReceived;
             _messageProcessor.OnAITextReceived += HandleAITextReceived;
             _messageProcessor.OnAITextChunkReceived += HandleAITextChunkReceived;
@@ -220,7 +223,7 @@ namespace Brendha.Spike.Server.Services.Gemini
                 _logger.LogError("Non-recoverable error: {Status}. Notifying client.", status);
                 var errorData = new { status = status.ToString(), description, message = "A non-recoverable error occurred. Please restart the interview." };
                 OnFatalError?.Invoke(errorData);
-                await _interviewLogger.LogAsync("System", $"Fatal error: {status} - {description}");
+                await _interviewFileLogger.LogAsync("System", $"Fatal error: {status} - {description}");
             }
         }
 
@@ -245,7 +248,7 @@ namespace Brendha.Spike.Server.Services.Gemini
 
         private async Task HandleAITextReceived(string text)
         {
-            await _interviewLogger.LogAsync("Brendha (AI): ", text);
+            await _interviewFileLogger.LogAsync("Brendha (AI): ", text);
             _logger.LogInformation("Brendha(IA): {text}", text);
             if (text.Contains("[FINISH_INTERVIEW]"))
             {
@@ -267,7 +270,7 @@ namespace Brendha.Spike.Server.Services.Gemini
 
         private async Task HandleUserTextReceived(string text)
         {
-            await _interviewLogger.LogAsync("Candidate: ", text);
+            await _interviewFileLogger.LogAsync("Candidate: ", text);
             _logger.LogInformation("Candidate: {text}", text);
         }
 
@@ -299,6 +302,23 @@ namespace Brendha.Spike.Server.Services.Gemini
                 _logger.LogError(ex, "Error to process Tool Call finish_interview");
             }
         }
+        
+        private async Task HandleReconnectionAttempt (ReconnectionAttemptArgs args) 
+        {
+            await _interviewFileLogger.LogAsync("System", $"Reconnection attempt {args.Attempt}/{args.MaxAttempts}");
+            OnReconnectionAttempt?.Invoke(args);
+        }
+        private async Task HandleReconnetionSuccess()
+        {
+            await _interviewFileLogger.LogAsync("System", "Reconnection successful");
+            OnReconnectionSuccess?.Invoke();
+        }
+        private async Task HandleReconnectionFailed(ReconnectionFailedArgs args)
+        {
+            await _interviewFileLogger.LogAsync("System", $"Fail to reconnect after multiple attempts");
+            OnReconnectionFailed?.Invoke(args);
+        }
+
         #endregion
         public void Dispose()
         {
@@ -309,6 +329,9 @@ namespace Brendha.Spike.Server.Services.Gemini
             {
                 _connectionManager.OnMessageReceived -= HandleMessageReceived;
                 _connectionManager.OnConnectionClosed -= HandleConnectionClosed;
+                _reconnectionManager.OnReconnectionAttempt -= HandleReconnectionAttempt;
+                _reconnectionManager.OnReconnectionSuccess -= HandleReconnetionSuccess;
+                _reconnectionManager.OnReconnectionFailed -= HandleReconnectionFailed;
                 _messageProcessor.OnAudioReceived -= HandleAudioReceived;
                 _messageProcessor.OnAITextReceived -= HandleAITextReceived;
                 _messageProcessor.OnAITextChunkReceived -= HandleAITextChunkReceived;

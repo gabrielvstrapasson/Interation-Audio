@@ -6,10 +6,7 @@ using System.Net.WebSockets;
 
 namespace Brendha.Spike.Server.Services.Connection
 {
-    public class GeminiReconnectionManager(
-        ILogger<IGeminiReconnectionManager> logger,
-        IInterviewFileLogger interviewLogger,
-        IHubContext<InterviewHub> hubContext) : IGeminiReconnectionManager
+    public class GeminiReconnectionManager(ILogger<IGeminiReconnectionManager> logger) : IGeminiReconnectionManager
     {
         private const int MAX_RECONNECTION_ATTEMPTS = 3;
         private const int BASE_DELAY_SECONDS = 2;
@@ -55,24 +52,14 @@ namespace Brendha.Spike.Server.Services.Connection
                 try
                 {
                     logger.LogInformation($"Reconnection attempt {attempt}/{MAX_RECONNECTION_ATTEMPTS}");
-                    await interviewLogger.LogAsync("System", $"Trying to reconnect ({attempt}/{MAX_RECONNECTION_ATTEMPTS})");
-
-                    if (OnReconnectionAttempt != null)
-                    {
-                        await OnReconnectionAttempt.Invoke(new ReconnectionAttemptArgs(attempt, MAX_RECONNECTION_ATTEMPTS));
-                    }
+                    OnReconnectionAttempt?.Invoke(new ReconnectionAttemptArgs(attempt, MAX_RECONNECTION_ATTEMPTS));
 
                     var delaySeconds = (int)Math.Pow(BASE_DELAY_SECONDS, attempt);
                     await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
 
                     await connectAction();
                     logger.LogInformation($"Reconnection successful on attempt {attempt}.");
-                    await interviewLogger.LogAsync("System", "Reconnection successful.");
-
-                   if (OnReconnectionSuccess != null)
-                    {
-                        await OnReconnectionSuccess.Invoke();
-                    }
+                    OnReconnectionSuccess?.Invoke();
 
                     Reset();
                     return true;
@@ -85,12 +72,9 @@ namespace Brendha.Spike.Server.Services.Connection
                     if (attempt == MAX_RECONNECTION_ATTEMPTS)
                     {
                         logger.LogError("All reconnection attempts failed");
-                        await interviewLogger.LogAsync("System", "Fail to reconnect after multiple attempts");
 
-                       if (OnReconnectionFailed != null)
-                        {
-                            await OnReconnectionFailed.Invoke(new ReconnectionFailedArgs(MAX_RECONNECTION_ATTEMPTS, ex.Message, "Failed to reconnect, please restart the interview."));
-                        }
+                        OnReconnectionFailed?.Invoke(new ReconnectionFailedArgs(MAX_RECONNECTION_ATTEMPTS, ex.Message, "Failed to reconnect, please restart the interview."));
+
                     }
                 }
             }

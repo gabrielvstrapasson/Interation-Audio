@@ -55,9 +55,13 @@ namespace Brendha.Spike.Server.Services.Gemini
 
         public void Dispose()
         {
-            foreach (var connectionId in _sessions.Keys)
+            var connectionIds = _sessions.Keys.ToList();
+            foreach (var connectionId in connectionIds)
             {
-                RemoveSessionAsync(connectionId).Wait();
+                if (_sessions.TryRemove(connectionId, out var orchestrator))
+                {
+                    orchestrator.Dispose();
+                }
             }
         }
     }

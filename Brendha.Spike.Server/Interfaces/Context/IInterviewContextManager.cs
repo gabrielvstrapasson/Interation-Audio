@@ -2,6 +2,6 @@
 {
     public interface IInterviewContextManager : IDisposable
     {
-        Task<string> BuildReconnectionContextAsync();
+        Task<string> BuildReconnectionContextAsync(string fullHistory);
     }
 }

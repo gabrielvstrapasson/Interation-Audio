@@ -18,7 +18,6 @@ using Brendha.Spike.Server.Services.Resume;
 using Brendha.Spike.Server.Services.Transport;
 using Brendha.Spike.Server.Workers;
 using DotNetEnv;
-using Microsoft.AspNetCore.SignalR;
 using System.Text.Json;
 
 Env.Load();
@@ -35,7 +34,6 @@ builder.Services.AddSingleton<IInterviewLoggerFactory, InterviewLoggerFactory>()
 
 builder.Services.AddTransient<IWebSocketClient, WebSocketClient>();
 builder.Services.AddTransient<IGeminiReconnectionManager, GeminiReconnectionManager>();
-builder.Services.AddTransient<IInterviewFileLogger, InterviewFileLogger>();
 builder.Services.AddTransient<IGeminiConnectionManager, GeminiConnectionManager>();
 builder.Services.AddTransient<IInterviewContextManager, InterviewContextManager>();
 builder.Services.AddTransient<IGeminiMessageProcessor, GeminiMessageProcessor>();

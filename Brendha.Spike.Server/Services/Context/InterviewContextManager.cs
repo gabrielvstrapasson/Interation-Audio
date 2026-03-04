@@ -4,8 +4,7 @@ using Brendha.Spike.Server.Interfaces.Logger;
 namespace Brendha.Spike.Server.Services.Context
 {
     public class InterviewContextManager(
-        ILogger<InterviewContextManager> logger,
-        IInterviewFileLogger interviewLogger) : IInterviewContextManager
+        ILogger<InterviewContextManager> logger) : IInterviewContextManager
     {
         private const int MAX_CONTEXT_LENGTH = 4000;
         private const int MAX_RECENT_LINES = 20;
@@ -13,14 +12,12 @@ namespace Brendha.Spike.Server.Services.Context
         private readonly SemaphoreSlim _contextLock = new(1, 1);
         private bool _isDisposed = false;
 
-        public bool HasContext => !string.IsNullOrWhiteSpace(interviewLogger.GetHistory());
-        public async Task<string> BuildReconnectionContextAsync()
+        public async Task<string> BuildReconnectionContextAsync(string fullHistory)
         {
             await _contextLock.WaitAsync();
 
             try
             {
-                var fullHistory = interviewLogger.GetHistory();
 
                 if (string.IsNullOrWhiteSpace(fullHistory))
                 {
@@ -52,7 +49,5 @@ namespace Brendha.Spike.Server.Services.Context
             _isDisposed = true;
             _contextLock?.Dispose();
         }
-
-
     }
 }
