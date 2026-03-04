@@ -31,6 +31,7 @@ builder.Services.AddSingleton<IGeminiSetupConfigBuilder, GeminiSetupConfigBuilde
 builder.Services.AddSingleton<IGeminiFeedbackAgent, GeminiFeedbackAgent>();
 builder.Services.AddSingleton<IFeedbackGeminiClient, FeedbackGeminiClient>();
 builder.Services.AddSingleton<InterviewSessionManager>();
+builder.Services.AddSingleton<IInterviewLoggerFactory, InterviewLoggerFactory>();
 
 builder.Services.AddTransient<IWebSocketClient, WebSocketClient>();
 builder.Services.AddTransient<IGeminiReconnectionManager, GeminiReconnectionManager>();

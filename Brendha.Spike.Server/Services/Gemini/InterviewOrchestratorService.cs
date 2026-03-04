@@ -29,7 +29,9 @@ namespace Brendha.Spike.Server.Services.Gemini
         IGeminiReconnectionManager reconnectionManager,
         IGeminiMessageProcessor messageProcessor,
         IGeminiSetupConfigBuilder setupConfigBuilder,
-        IGeminiFeedbackAgent feedbackAgent
+        IGeminiFeedbackAgent feedbackAgent,
+        IInterviewFileLogger interviewFileLogger,
+        IInterviewLoggerFactory interviewLoggerFactory
         ) : IDisposable
     {
 
@@ -60,6 +62,8 @@ namespace Brendha.Spike.Server.Services.Gemini
 
         public bool IsConnected => connectionManager.IsConnected;
         public bool HasResume => !string.IsNullOrWhiteSpace(_sessionState.PendingResumeText) || !string.IsNullOrWhiteSpace(_sessionState.CurrentResumeText);
+       
+        public void Initialize(string connectionId) { interviewFileLogger = interviewLoggerFactory.Create(connectionId); }
         public async Task ConnectAsync()
         {
             AttachHandlersOnce();

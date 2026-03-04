@@ -19,21 +19,20 @@ namespace Brendha.Spike.Server.Services.Gemini
         {
             _logger.LogInformation("Creating new interview session for connectionId: {connectionId}", connectionId);
             var orchestrator = _serviceProvider.GetRequiredService<InterviewOrchestratorService>();
+            orchestrator.Initialize(connectionId);
 
-            if (_sessions.TryAdd(connectionId, orchestrator))
-            {
-                orchestrator.OnAudioToClientReceived += (audioBytes) => _hubContext.Clients.Client(connectionId).SendAsync("ReceiveAudio", audioBytes);
-                orchestrator.OnAIQuestionChunkReceived += (chunk) => _hubContext.Clients.Client(connectionId).SendAsync("ReceiveAIQuestion", chunk);
-                orchestrator.OnInterviewEnded += () => _hubContext.Clients.Client(connectionId).SendAsync("InterviewEnded");
-                orchestrator.OnFeedbackGenerated += (feedback) => _hubContext.Clients.Client(connectionId).SendAsync("FeedbackGenerated", feedback);
-                orchestrator.OnSessionStarted += (time) => _hubContext.Clients.Client(connectionId).SendAsync("SessionStarted", time);
-                orchestrator.OnResumeReceived += (result) => _hubContext.Clients.Client(connectionId).SendAsync("ResumeReceived", result);
-                orchestrator.OnFatalError += (errorData) => _hubContext.Clients.Client(connectionId).SendAsync("FatalError", errorData);
-                orchestrator.OnReconnectionAttempt += (args) => _hubContext.Clients.Client(connectionId).SendAsync("ReconnectionAttempt", new { attempt = args.Attempt, maxAttempt = args.MaxAttempts });
-                orchestrator.OnReconnectionSuccess += () => _hubContext.Clients.Client(connectionId).SendAsync("ReconnectionSuccess", new { message = "Reconnection successful!" });
-                orchestrator.OnReconnectionFailed += (args) => _hubContext.Clients.Client(connectionId).SendAsync("ReconnectionFailed", new { attempts = args.Attempts, lastError = args.LastError, message = args.Message });
-            }
+            orchestrator.OnAudioToClientReceived += (audioBytes) => _hubContext.Clients.Client(connectionId).SendAsync("ReceiveAudio", audioBytes);
+            orchestrator.OnAIQuestionChunkReceived += (chunk) => _hubContext.Clients.Client(connectionId).SendAsync("ReceiveAIQuestion", chunk);
+            orchestrator.OnInterviewEnded += () => _hubContext.Clients.Client(connectionId).SendAsync("InterviewEnded");
+            orchestrator.OnFeedbackGenerated += (feedback) => _hubContext.Clients.Client(connectionId).SendAsync("FeedbackGenerated", feedback);
+            orchestrator.OnSessionStarted += (time) => _hubContext.Clients.Client(connectionId).SendAsync("SessionStarted", time);
+            orchestrator.OnResumeReceived += (result) => _hubContext.Clients.Client(connectionId).SendAsync("ResumeReceived", result);
+            orchestrator.OnFatalError += (errorData) => _hubContext.Clients.Client(connectionId).SendAsync("FatalError", errorData);
+            orchestrator.OnReconnectionAttempt += (args) => _hubContext.Clients.Client(connectionId).SendAsync("ReconnectionAttempt", new { attempt = args.Attempt, maxAttempt = args.MaxAttempts });
+            orchestrator.OnReconnectionSuccess += () => _hubContext.Clients.Client(connectionId).SendAsync("ReconnectionSuccess", new { message = "Reconnection successful!" });
+            orchestrator.OnReconnectionFailed += (args) => _hubContext.Clients.Client(connectionId).SendAsync("ReconnectionFailed", new { attempts = args.Attempts, lastError = args.LastError, message = args.Message });
 
+            _sessions.TryAdd(connectionId, orchestrator);
             return Task.CompletedTask;
         }
 

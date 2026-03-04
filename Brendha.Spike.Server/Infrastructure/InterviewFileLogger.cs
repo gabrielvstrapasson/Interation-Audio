@@ -11,7 +11,7 @@ namespace Brendha.Spike.Server.Infrastructure
 
         public string LogFilePath => _filePath;
 
-        public InterviewFileLogger(ILogger<InterviewFileLogger> logger)
+        public InterviewFileLogger(ILogger<InterviewFileLogger> logger, string connectionId)
         {
             _logger = logger;
 
@@ -20,8 +20,9 @@ namespace Brendha.Spike.Server.Infrastructure
 
             if (!Directory.Exists(logFolder)) Directory.CreateDirectory(logFolder);
 
-            _filePath = Path.Combine(logFolder, $"interview_log_{DateTime.Now:yyyyMMdd_HHmmss}.txt");
-            _logger.LogInformation("Interview created at: {_filePath}", _filePath);
+            var sanitizedConnectionId = connectionId.Replace("/", "_").Replace("=", "");
+            _filePath = Path.Combine(logFolder, $"interview_log_{DateTime.Now:yyyyMMdd_HHmmss}_{sanitizedConnectionId}.txt");
+            _logger.LogInformation("Interview log created for connection {connectionId} at: {_filePath}", connectionId, _filePath);
         }
 
         public async Task LogAsync(string role, string message)
