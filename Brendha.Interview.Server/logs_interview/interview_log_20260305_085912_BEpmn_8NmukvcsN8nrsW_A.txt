@@ -1,0 +1,2 @@
+[08:59:18] Candidate: : Olá, nome.
+[08:59:20] System: Interview ended

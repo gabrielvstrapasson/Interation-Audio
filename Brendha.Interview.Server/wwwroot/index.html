@@ -1,0 +1,336 @@
+﻿<!doctype html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Entrevista Técnica - Brendha AI</title>
+    <link rel="stylesheet" href="style.css" />
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+</head>
+
+<body class="lobby-mode">
+    <div class="ambient-light"></div>
+
+    <div class="loading-overlay" id="sessionLoading">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <h3>Conectando com a Brendha...</h3>
+            <p>Analisando seu perfil e o contexto da 'vaga'.</p>
+        </div>
+    </div>
+
+    <div class="top-nav-container">
+        <div class="glass-island tools-nav glass-effect">
+            <button class="tool-btn" onclick="toggleJobPanel()" title="Ver Vaga">
+                <i class="material-icons">description</i>
+            </button>
+            <div class="separator-small"></div>
+            <button class="tool-btn" onclick="openUploadModal()" title="Enviar Currículo">
+                <i class="material-icons">cloud_upload</i>
+            </button>
+        </div>
+
+        <nav class="glass-island main-nav glass-effect">
+            <div class="nav-section left">
+                <div class="live-badge" style="opacity: 0">
+                    <div class="pulse-dot" id="recDot"></div>
+                </div>
+                <span class="nav-title" id="navTitle">Carregando Vaga...</span>
+            </div>
+            <div class="nav-section center">
+                <div class="timer-pill" id="sessionTimer" style="display: none">
+                    <span id="timeLeft">10:00</span>
+                </div>
+                <button class="action-btn-pill" id="btnJoin" onclick="startMeeting()" disabled
+                        title="Envie o currículo primeiro">
+                    <i class="material-icons">play_circle</i>
+                    <span>Iniciar</span>
+                </button>
+                <div id="meetingControls" style="display: none">
+                    <button class="action-btn-pill danger" onclick="stopMeeting()">
+                        <i class="material-icons">stop_circle</i>
+                        <span>Encerrar</span>
+                    </button>
+                </div>
+            </div>
+            <div class="nav-section right">
+                <div class="clock" id="clock">10:00</div>
+            </div>
+        </nav>
+    </div>
+
+    <div class="layout-wrapper">
+        <aside class="side-panel glass-effect" id="jobPanel">
+            <div class="panel-content-wrapper">
+                <div class="panel-header">
+                    <div class="header-left">
+                        <i class="material-icons">description</i>
+                        <span id="navTitle">Detalhes da Vaga</span>
+                    </div>
+                    <div class="header-actions">
+                        <button class="icon-action" onclick="openEditJobModal()" title="Editar Vaga">
+                            <i class="material-icons">edit</i>
+                        </button>
+                        <button class="icon-action pin-btn" onclick="togglePin()" title="Fixar">
+                            <i class="material-icons">push_pin</i>
+                        </button>
+                        <button class="icon-action" onclick="toggleJobPanel()">
+                            <i class="material-icons">close</i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="tabs">
+                    <button class="tab-btn active" onclick="switchTab('tab1')">
+                        Geral
+                    </button>
+                    <button class="tab-btn" onclick="switchTab('tab2')">
+                        Benefícios
+                    </button>
+                </div>
+
+                <div class="panel-body custom-scroll">
+                    <div id="tab1" class="tab-content active">
+                        <div class="info-bubble">
+                            <h5>Descrição da Vaga</h5>
+                            <p id="jobDescription">Aguardando informações...</p>
+                            <div class="tags" id="jobStackTags"></div>
+                        </div>
+                        <div class="text-block">
+                            <h5>Remuneração</h5>
+                            <p class="highlight-text" id="jobSalary">Aguarde...</p>
+                        </div>
+                        <div class="text-block">
+                            <h5>Requisitos</h5>
+                            <ul class="styled-list" id="jobRequirementsList"></ul>
+                        </div>
+                    </div>
+
+                    <div id="tab2" class="tab-content">
+                        <div class="text-block">
+                            <h5>Benefícios</h5>
+                            <ul class="styled-list" id="jobBenefitsList"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="stage-container">
+            <div class="video-stack">
+                <div class="video-card glass-border ai-card hidden" id="aiCard">
+                    <img class="video-source"
+                         src="https://img.freepik.com/free-psd/3d-illustration-person-with-long-hair_23-2149436197.jpg"
+                         alt="Brendha AI" />
+
+                    <div class="ai-question-box" id="aiQuestionBox" style="opacity: 0">
+                        <span class="question-label">Pergunta Atual:</span>
+                        <p id="aiQuestionText"></p>
+                    </div>
+
+                    <div class="card-overlay">
+                        <div class="audio-waves" id="aiIndicator">
+                            <span></span><span></span><span></span><span></span>
+                        </div>
+                        <div class="user-pill">
+                            <span>Brendha</span>
+                            <i class="material-icons verified">verified</i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="video-card glass-border user-card-lobby" id="userCard">
+                    <video id="userVideo" autoplay playsinline muted></video>
+                    <div class="video-placeholder" id="userPlaceholder">
+                        <div class="avatar-glow">VC</div>
+                    </div>
+                    <div class="card-overlay">
+                        <div class="user-pill">
+                            <span>Você</span>
+                            <i class="material-icons micro-status" id="statusMicIcon" style="display: none">mic_off</i>
+                        </div>
+                        <div class="floating-controls">
+                            <button class="glass-btn-icon" id="btnCam" onclick="toggleCamera()">
+                                <i class="material-icons" id="iconCam">videocam</i>
+                            </button>
+                            <button class="glass-btn-icon" id="btnMic" title="Segure para falar (Espaço)" onmousedown="startPTT()"
+                                    onmouseup="stopPTT()" onmouseleave="stopPTT()" ontouchstart="startPTT(); event.preventDefault();"
+                                    ontouchend="stopPTT(); event.preventDefault();">
+                                <i class="material-icons" id="iconMic">mic_off</i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="modal-backdrop" id="uploadModal">
+        <div class="modal-box glass-effect">
+            <div class="modal-header">
+                <h3>Enviar Currículo</h3>
+                <button class="close-modal" onclick="closeUploadModal()">
+                    <i class="material-icons">close</i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="resume-tabs">
+                    <button class="resume-tab-btn active" onclick="switchResumeMode('upload')" id="uploadModeBtn">
+                        <i class="material-icons">cloud_upload</i>
+                        <span>Upload PDF</span>
+                    </button>
+                    <button class="resume-tab-btn" onclick="switchResumeMode('text')" id="textModeBtn">
+                        <i class="material-icons">edit_note</i>
+                        <span>Digitar Texto</span>
+                    </button>
+                </div>
+
+                <div id="uploadMode" class="resume-mode active">
+                    <label class="modal-upload-area" id="dropZone">
+                        <div class="upload-circle">
+                            <i class="material-icons">upload</i>
+                        </div>
+                        <strong id="uploadText">Clique ou arraste o arquivo</strong>
+                        <span>PDF até 10MB</span>
+                        <input type="file" id="resumeUpload" accept=".pdf" />
+                    </label>
+                </div>
+
+                <div id="textMode" class="resume-mode">
+                    <div class="text-input-wrapper">
+                        <textarea id="resumeTextArea"
+                                  placeholder="Cole ou digite seu currículo aqui&#10;&#10;Inclua:&#10;• Experiências profissionais&#10;• Formação acadêmica&#10;• Habilidades técnicas&#10;• Certificações"
+                                  rows="12"></textarea>
+                        <div class="char-counter">
+                            <span id="charCount">0</span> caracteres
+                        </div>
+                    </div>
+                </div>
+
+                <div class="current-resume">
+                    <span>Currículo atual:</span>
+                    <strong id="currentResumeName">Nenhum</strong>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn-cancel" onclick="closeUploadModal()">
+                        Cancelar
+                    </button>
+                    <button class="btn-confirm" id="btnSendResume" onclick="submitResume()">
+                        Enviar Currículo
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="editJobModal">
+        <div class="modal-box glass-effect edit-job-modal">
+            <div class="modal-header">
+                <h3>Editar Vaga</h3>
+                <button class="close-modal" onclick="closeEditJobModal()">
+                    <i class="material-icons">close</i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="editJobForm" class="job-form">
+                    <div class="form-grid">
+                        <div class="form-group full-width">
+                            <label for="jobTitle">Título da Vaga *</label>
+                            <input type="text" id="jobTitle" required placeholder="Ex: Desenvolvedor Full Stack Sênior" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="jobLevel">Nível *</label>
+                            <select id="jobLevel" required>
+                                <option value="">Selecione...</option>
+                                <option value="Júnior">Júnior</option>
+                                <option value="Pleno">Pleno</option>
+                                <option value="Sênior">Sênior</option>
+                                <option value="Especialista">Especialista</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="valorInicial">Valor Inicial *</label>
+                            <input type="text" id="valorInicial" placeholder="Ex: 1.000,00" required />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="valorMaximo">Valor Máximo (Opcional)</label>
+                            <input type="text" id="valorMaximo" placeholder="Ex: 2.000,00" />
+                        </div>
+
+
+                        <input type="hidden" id="jobSalaryInput" name="jobSalary" />
+
+                        <div class="form-group full-width">
+                            <label for="jobDescriptionInput">Descrição *</label>
+                            <textarea id="jobDescriptionInput" rows="4" required
+                                      placeholder="Descreva as responsabilidades e o contexto da vaga..."></textarea>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="mandatorySkillsInput">Habilidades Obrigatórias</label>
+                            <div class="tags-input-wrapper">
+                                <div class="tags-display" id="mandatoryTagsDisplay"></div>
+                                <input type="text" id="mandatorySkillsInput" placeholder="Digite e pressione Enter" />
+                            </div>
+                            <small>Pressione Enter para adicionar cada skill</small>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="niceToHaveSkillsInput">Habilidades Desejáveis</label>
+                            <div class="tags-input-wrapper">
+                                <div class="tags-display" id="niceToHaveTagsDisplay"></div>
+                                <input type="text" id="niceToHaveSkillsInput" placeholder="Digite e pressione Enter" />
+                            </div>
+                            <small>Pressione Enter para adicionar cada skill</small>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="benefitsInput">Benefícios</label>
+                            <div class="tags-input-wrapper">
+                                <div class="tags-display" id="benefitsTagsDisplay"></div>
+                                <input type="text" id="benefitsInput" placeholder="Digite e pressione Enter" />
+                            </div>
+                            <small>Pressione Enter para adicionar cada benefício</small>
+                        </div>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button type="button" class="btn-reset" onclick="resetJobToDefault()">
+                            <i class="material-icons">refresh</i>
+                            Restaurar Padrão
+                        </button>
+                        <button type="button" class="btn-clear" onclick="clearJobFields()">
+                            <i class="material-icons">clear_all</i>
+                            Limpar Campos
+                        </button>
+                        <div style="flex: 1"></div>
+                        <button type="button" class="btn-cancel" onclick="closeEditJobModal()">
+                            Cancelar
+                        </button>
+                        <button type="submit" class="btn-confirm" id="btnSaveJob">
+                            <i class="material-icons">save</i>
+                            Salvar Alterações
+                        </button>
+
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="feedback-page" id="feedbackPage">
+        <div class="feedback-page-content glass-effect" id="feedbackContent">
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
