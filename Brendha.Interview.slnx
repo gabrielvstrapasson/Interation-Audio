@@ -1,4 +1,6 @@
 <Solution>
-  <Project Path="Brendha.Spike.Core/Brendha.Interview.Core.csproj" />
-  <Project Path="Brendha.Spike.Server/Brendha.Interview.Server.csproj" />
+  <Project Path="Brendha.Interview.Core/Brendha.Interview.Core.csproj" />
+  <Project Path="Brendha.Interview.Server/Brendha.Interview.Server.csproj">
+    <BuildDependency Project="Brendha.Interview.Core/Brendha.Interview.Core.csproj" />
+  </Project>
 </Solution>

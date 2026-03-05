@@ -1,6 +1,0 @@
-# @Brendha.Spike.Server_HostAddress = http://localhost:5193
-
-# GET {{Brendha.Spike.Server_HostAddress}}/weatherforecast/
-# Accept: application/json
-
-# ###
