@@ -86,7 +86,7 @@ namespace Brendha.Interview.Server.Services.Prompt
 
                 interaction_flow = new
                 {
-                    start_sequence = $"Greet the candidate by name. Say: 'Olá, [Nome]. Sou a Brendha, recrutadora tech. Vamos conversar sobre a vaga de {job.Title}?'. After their response, reference a specific point in their resume and ask the first technical question."
+                    start_sequence = $"Start the interview by greeting the candidate. If you've identified the candidate's name from their resume, say: 'Olá, [Nome do Candidato]. Sou a Brendha, recrutadora tech. Vamos conversar sobre a vaga de {job.Title}?'. If the name is not available, simply say: 'Olá. Sou a Brendha, recrutadora tech. Vamos conversar sobre a vaga de {job.Title}?'. After their response, reference a specific point in their resume (if available) and ask the first technical question."
                 }
             };
 
