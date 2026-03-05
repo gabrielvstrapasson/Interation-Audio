@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DotNetEnv" Version="3.1.1" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+	  <ProjectReference Include="..\Brendha.Interview.Core\Brendha.Interview.Core.csproj" />
+	  <ProjectReference Include="..\Brendha.Spike.Core\Brendha.Interview.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="logs_interview\" />
+  </ItemGroup>
+
+</Project>
