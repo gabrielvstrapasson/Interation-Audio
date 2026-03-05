@@ -48,18 +48,6 @@ builder.Services.AddControllers()
 builder.Services.AddHostedService<AudioProcessorWorker>();
 builder.Services.AddOpenApi();
 
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.WithOrigins("http://localhost:5500", "http://localhost:3000", "http://127.0.0.1:5500")
-        .AllowAnyHeader()
-        .AllowAnyMethod()
-        .AllowCredentials();
-    });
-
-});
-
 builder.Services.AddSignalR(options =>
 {
     options.EnableDetailedErrors = true;
@@ -78,8 +66,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseCors("AllowAll");
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 app.UseAuthorization();
 
