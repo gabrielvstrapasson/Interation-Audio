@@ -1,5 +1,4 @@
-﻿using Brendha.Interview.Core.Models;
-using Brendha.Interview.Core.Models.DTOs.Agents;
+﻿using Brendha.Interview.Core.Models.DTOs.Agents;
 using Brendha.Interview.Core.Models.DTOs.Gemini;
 using Brendha.Interview.Core.Models.State;
 using Brendha.Interview.Server.Hubs;
@@ -9,13 +8,9 @@ using Brendha.Interview.Server.Interfaces.Context;
 using Brendha.Interview.Server.Interfaces.Helpers;
 using Brendha.Interview.Server.Interfaces.Logger;
 using Brendha.Interview.Server.Interfaces.Processing;
-using Brendha.Interview.Server.Interfaces.Transport;
-using Brendha.Interview.Server.Services.Context;
-using Brendha.Interview.Server.Services.Data;
+using Brendha.Interview.Server.Interfaces.Services;
 using Microsoft.AspNetCore.SignalR;
-using System.Diagnostics;
 using System.Net.WebSockets;
-using System.Text;
 using System.Text.Json;
 
 namespace Brendha.Interview.Server.Services.Gemini
@@ -29,7 +24,8 @@ namespace Brendha.Interview.Server.Services.Gemini
         IGeminiReconnectionManager reconnectionManager,
         IGeminiMessageProcessor messageProcessor,
         IGeminiSetupConfigBuilder setupConfigBuilder,
-        IGeminiFeedbackAgent feedbackAgent
+        IGeminiFeedbackAgent feedbackAgent,
+        IJobService jobService
         ) : IDisposable
     {
         private readonly InterviewSessionState _sessionState = new();
@@ -41,6 +37,7 @@ namespace Brendha.Interview.Server.Services.Gemini
         private readonly IHubContext<InterviewHub> _hubContext = hubContext;
         private readonly IInterviewContextManager _contextManager = contextManager;
         private readonly IGeminiConnectionManager _connectionManager = connectionManager;
+        private readonly IJobService _jobService = jobService;
         private readonly IGeminiReconnectionManager _reconnectionManager = reconnectionManager;
         private readonly IGeminiMessageProcessor _messageProcessor = messageProcessor;
         private readonly IGeminiSetupConfigBuilder _setupConfigBuilder = setupConfigBuilder;
@@ -172,7 +169,7 @@ namespace Brendha.Interview.Server.Services.Gemini
             _sessionState.SessionEndTime = DateTime.UtcNow.AddMinutes(10);
             OnSessionStarted.Invoke(GetTimeRemaining());
 
-            _sessionState.CurrentJob = JobMockService.GetCurrentJob();
+            _sessionState.CurrentJob = await _jobService.GetCurrentJobAsync();
             var history = _interviewFileLogger.GetHistory();
             var reconnectionContext = await contextManager.BuildReconnectionContextAsync(history);
 
