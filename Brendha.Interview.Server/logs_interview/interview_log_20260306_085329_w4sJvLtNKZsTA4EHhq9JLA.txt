@@ -1,0 +1,4 @@
+[08:53:35] Candidate: : Ой, блин.
+[08:53:43] Brendha (AI): : Olá, Fábio. Sou a Brendha, recrutadora tech. Vamos conversar sobre a vaga de Desenvolvedor .NET Backend Júnior?
+[08:54:05] Candidate: : Claro, vamos
+[08:54:18] Brendha (AI): : Pelo seu resumo, vejo que trabalha com .NET. Dentro da sua experiência, como você aplica os princípios de Orientação a Objetos no dia a dia? Fale um pouco sobre herança e polimorfismo.

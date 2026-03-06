@@ -10,7 +10,9 @@ namespace Brendha.Interview.Server.Services.Gemini
         ILogger<InterviewSessionManager> logger) : IDisposable
     {
 
-        private readonly ConcurrentDictionary<string, InterviewOrchestratorService> _sessions = new();
+        private record SessionEntry(IServiceScope Scope, InterviewOrchestratorService Orchestrator);
+
+        private readonly ConcurrentDictionary<string, SessionEntry> _sessions = new();
         private readonly IServiceProvider _serviceProvider = serviceProvider;
         private readonly IHubContext<InterviewHub> _hubContext = hubContext;
         private readonly ILogger<InterviewSessionManager> _logger = logger;
@@ -18,7 +20,10 @@ namespace Brendha.Interview.Server.Services.Gemini
         public Task CreateSessionAsync(string connectionId)
         {
             _logger.LogInformation("Creating new interview session for connectionId: {connectionId}", connectionId);
-            var orchestrator = _serviceProvider.GetRequiredService<InterviewOrchestratorService>();
+
+            var scope = _serviceProvider.CreateScope();
+            var orchestrator = scope.ServiceProvider.GetRequiredService<InterviewOrchestratorService>();
+
             orchestrator.Initialize(connectionId);
 
             orchestrator.OnAudioToClientReceived += (audioBytes) => _hubContext.Clients.Client(connectionId).SendAsync("ReceiveAudio", audioBytes);
@@ -32,23 +37,35 @@ namespace Brendha.Interview.Server.Services.Gemini
             orchestrator.OnReconnectionSuccess += () => _hubContext.Clients.Client(connectionId).SendAsync("ReconnectionSuccess", new { message = "Reconnection successful!" });
             orchestrator.OnReconnectionFailed += (args) => _hubContext.Clients.Client(connectionId).SendAsync("ReconnectionFailed", new { attempts = args.Attempts, lastError = args.LastError, message = args.Message });
 
-            _sessions.TryAdd(connectionId, orchestrator);
+            _sessions.TryAdd(connectionId, new SessionEntry(scope, orchestrator));
             return Task.CompletedTask;
         }
 
 
         public InterviewOrchestratorService? GetSession(string connectionId)
         {
-            _sessions.TryGetValue(connectionId, out var session);
-            return session;
+            if (_sessions.TryGetValue(connectionId, out var entry))
+                return entry.Orchestrator;
+            return null;
         }
 
         public Task RemoveSessionAsync(string connectionId)
         {
             _logger.LogInformation("Removing interview session for connectionId: {connectionId}", connectionId);
-            if (_sessions.TryRemove(connectionId, out var orchestrator))
+            if (_sessions.TryRemove(connectionId, out var entry))
             {
-                orchestrator.Dispose();
+                try
+                {
+                    entry.Orchestrator.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error disposing orchestrator for {connectionId}", connectionId);
+                }
+                finally
+                {
+                    entry.Scope.Dispose();
+                }
             }
             return Task.CompletedTask;
         }
@@ -58,9 +75,10 @@ namespace Brendha.Interview.Server.Services.Gemini
             var connectionIds = _sessions.Keys.ToList();
             foreach (var connectionId in connectionIds)
             {
-                if (_sessions.TryRemove(connectionId, out var orchestrator))
+                if (_sessions.TryRemove(connectionId, out var entry))
                 {
-                    orchestrator.Dispose();
+                    try { entry.Orchestrator.Dispose(); } catch { }
+                    try { entry.Scope.Dispose(); } catch { }
                 }
             }
         }
