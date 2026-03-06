@@ -1,0 +1,6 @@
+[08:52:57] Candidate: : Oi, brinda.
+[08:53:15] Brendha (AI): : Olá, Gabriel. Sou a Brendha, recrutadora tech. Vamos conversar sobre a vaga de Desenvolvedor .NET Backend Júnior? Pelo seu currículo, vejo que você tem interesse e alguma experiência, certo? Como você descreveria seus fundamentos em C# e Programação Orientada a Objetos?
+[08:53:44] Candidate: : É, pode repetir, por favor?
+[08:53:51] Brendha (AI): : Claro. Como você descreveria seus fundamentos em C# e Programação Orientada a Objetos?
+[08:54:07] Candidate: : Ah, sobre programação orientada do objeto.
+[08:54:13] Brendha (AI): : Sim, em C# Quais são os conceitos que você domina e como os aplica?

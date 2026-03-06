@@ -1,68 +1,42 @@
 ﻿using Brendha.Interview.Core.Models;
-using Brendha.Interview.Server.Services.Data;
-using Microsoft.AspNetCore.Http;
+using Brendha.Interview.Server.Interfaces.Services;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Cryptography.X509Certificates;
+using System.ComponentModel.DataAnnotations;
 
 namespace Brendha.Interview.Server.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class JobController(ILogger<JobController> logger) : ControllerBase
+    public class JobController(ILogger<JobController> logger, IJobService jobService) : ControllerBase
     {
         [HttpGet]
-        public IActionResult GetCurrentJob()
+        public async Task<IActionResult> GetCurrentJob()
         {
-            var job = JobMockService.GetCurrentJob();
+            var job = await jobService.GetCurrentJobAsync();
             return Ok(job);
         }
 
         [HttpPut]
-        public IActionResult UpdateJob([FromBody] JobPosition job)
+        public async Task<IActionResult> UpdateJob([FromBody] JobPosition job)
         {
-            if (job == null) return BadRequest("Job data is required.");
-            if (string.IsNullOrWhiteSpace(job.Title)) return BadRequest("Job title is required.");
-            if (string.IsNullOrWhiteSpace(job.Level)) return BadRequest("Job level is required.");
             try
             {
-
-                Console.WriteLine($"Atualizando vaga: {job.Title}");
-                Console.WriteLine($"Benefícios recebidos: {string.Join(", ", job.Benefits ?? new string[0])}");
-                Console.WriteLine($"Mandatory Skills recebidas: {string.Join(", ", job.MandatorySkills?? new string[0])}");
-
-                JobMockService.UpdateJob(job);
-                return Ok(new
-                {
-                    message = $"Job position updated successfully \n{job}",
-                    job = JobMockService.GetCurrentJob(),
-                });
-
+                await jobService.UpdateJobAsync(job);
+                var updated = await jobService.GetCurrentJobAsync();
+                return Ok(new { message = "Job position updated successfully", job = updated });
             }
-            catch (Exception ex)
+            catch (ValidationException vex)
             {
-                logger.LogError($"Error updating job: {ex.Message}");
-                return StatusCode(500, "Error updating job position.");
+               return BadRequest(vex.Message);
             }
         }
 
         [HttpPost("reset")]
-        public IActionResult ResetToDefault()
+        public async Task<IActionResult> ResetToDefault()
         {
-            try
-            {
-                JobMockService.ResetToDefault();
-
-                return Ok(new
-                {
-                    message = "Job position reset to default",
-                    job = JobMockService.GetCurrentJob()
-                });
-            }
-            catch (Exception ex)
-            {
-                logger.LogError($"Error resetting job: {ex.Message}");
-                return StatusCode(500, "Error resetting job position.");
-            }
+            await jobService.ResetToDefaultAsync();
+            var job = await jobService.GetCurrentJobAsync();
+            return Ok(new { message = "Job position reset to default", job });
         }
 
     }
